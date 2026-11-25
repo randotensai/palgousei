@@ -4,23 +4,154 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Palworld 複数親・最短合流ルート検索ツール</title>
+
+<!-- ==========================================================================
+     エラー検知バー用 独立ウォッチドッグスクリプト（本体より先に必ず実行）
+     ========================================================================== -->
+<script>
+(function () {
+  window.__PAL_APP_READY__ = false;
+  var errorLogs = [];
+
+  function ensureErrorBar() {
+    var bar = document.getElementById("globalErrorBar");
+    if (bar) return bar;
+    bar = document.createElement("div");
+    bar.id = "globalErrorBar";
+    bar.setAttribute("role", "alert");
+    bar.style.cssText = [
+      "position:fixed",
+      "top:0",
+      "left:0",
+      "right:0",
+      "z-index:99999",
+      "background:#7f1d1d",
+      "color:#fef2f2",
+      "border-bottom:2px solid #f87171",
+      "box-shadow:0 10px 30px rgba(0,0,0,0.65)",
+      "padding:12px 16px",
+      "font-family:system-ui,-apple-system,sans-serif",
+      "font-size:13px",
+      "line-height:1.5"
+    ].join(";");
+    bar.innerHTML =
+      '<div style="max-width:1360px;margin:0 auto;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;">' +
+          '<strong style="font-size:14px;color:#fecaca;">⚠️ エラー検知バー：スクリプトの異常を検出しました</strong>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button id="errBarCopyBtn" type="button" style="background:#dc2626;color:#fff;border:1px solid #fca5a5;border-radius:6px;padding:4px 10px;cursor:pointer;font-weight:700;font-size:12px;">📋 エラー内容をコピー</button>' +
+            '<button id="errBarCloseBtn" type="button" style="background:rgba(0,0,0,0.35);color:#fecaca;border:1px solid #f87171;border-radius:6px;padding:4px 10px;cursor:pointer;font-weight:700;font-size:12px;">✕ 閉じる</button>' +
+          '</div>' +
+        '</div>' +
+        '<pre id="errBarDetail" style="margin:0;padding:8px 10px;background:rgba(0,0,0,0.45);border:1px solid rgba(248,113,113,0.4);border-radius:6px;max-height:160px;overflow:auto;white-space:pre-wrap;word-break:break-all;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:#fee2e2;"></pre>' +
+      '</div>';
+
+    if (document.body) {
+      document.body.appendChild(bar);
+    } else {
+      document.documentElement.appendChild(bar);
+    }
+
+    var copyBtn = document.getElementById("errBarCopyBtn");
+    var closeBtn = document.getElementById("errBarCloseBtn");
+    if (copyBtn) {
+      copyBtn.onclick = function () {
+        var text = errorLogs.join("\n---\n");
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand("copy");
+          copyBtn.textContent = "✓ コピーしました";
+          setTimeout(function () { copyBtn.textContent = "📋 エラー内容をコピー"; }, 1800);
+        } catch (e) {
+          copyBtn.textContent = "コピー失敗";
+        }
+        document.body.removeChild(ta);
+      };
+    }
+    if (closeBtn) {
+      closeBtn.onclick = function () {
+        bar.style.display = "none";
+      };
+    }
+    return bar;
+  }
+
+  function showErrBar(err) {
+    var entry = "";
+    if (typeof err === "string") {
+      entry = err;
+    } else if (err instanceof Error) {
+      entry = "種類: Runtime Error\nメッセージ: " + err.message + (err.stack ? "\nスタックトレース:\n" + err.stack : "");
+    } else {
+      entry = "種類: Error\n詳細: " + String(err);
+    }
+    errorLogs.push(entry);
+    var bar = ensureErrorBar();
+    bar.style.display = "block";
+    var detail = document.getElementById("errBarDetail");
+    if (detail) {
+      detail.textContent = errorLogs.join("\n---\n");
+    }
+  }
+
+  window.__SHOW_ERR_BAR__ = showErrBar;
+
+  window.onerror = function (message, source, lineno, colno, error) {
+    var parts = [
+      "種類: Script / Runtime Error",
+      "メッセージ: " + String(message || "不明なエラー"),
+      "位置: " + (lineno || "?") + "行目 " + (colno || "?") + "列目"
+    ];
+    if (error && error.stack) {
+      parts.push("スタックトレース:\n" + error.stack);
+    }
+    showErrBar(parts.join("\n"));
+    return false;
+  };
+
+  window.addEventListener("unhandledrejection", function (event) {
+    var reason = event && event.reason;
+    var msg = reason instanceof Error ? reason.message : String(reason || "不明なPromiseエラー");
+    var stack = reason && reason.stack ? "\nスタックトレース:\n" + reason.stack : "";
+    showErrBar("種類: Unhandled Promise Rejection\nメッセージ: " + msg + stack);
+  });
+
+  window.addEventListener("load", function () {
+    setTimeout(function () {
+      if (window.__PAL_APP_READY__ !== true) {
+        showErrBar(
+          "種類: 初期化未完了（構文エラー等の可能性）\n" +
+          "メッセージ: メインスクリプトの初期化が完了しませんでした（window.__PAL_APP_READY__ !== true）。\n" +
+          "対処: ブラウザの開発者ツール(F12)のコンソールもあわせて確認してください。"
+        );
+      }
+    }, 1500);
+  });
+})();
+</script>
+
 <style>
 /* ==========================================================================
-   Design Tokens & Reset (Palworld Deep Blue x Cyan x Gold Theme)
+   Design Tokens & Base Styles (Dark Slate x Indigo x Cyan)
    ========================================================================== */
 :root {
-  --bg-base: #070c17;
-  --bg-surface: #0e1628;
-  --bg-card: #131f37;
-  --bg-card-hover: #1a2947;
-  --bg-input: #0a101f;
-  --border-subtle: rgba(56, 189, 248, 0.18);
-  --border-strong: rgba(56, 189, 248, 0.42);
+  --bg-base: #0b1120;
+  --bg-surface: #151f33;
+  --bg-card: #1b2740;
+  --bg-card-hover: #243456;
+  --bg-input: #0a101d;
+  --border-subtle: rgba(56, 189, 248, 0.22);
+  --border-strong: rgba(56, 189, 248, 0.52);
   --accent-cyan: #38bdf8;
   --accent-cyan-glow: rgba(56, 189, 248, 0.25);
+  --accent-indigo: #818cf8;
+  --accent-emerald: #10b981;
   --accent-gold: #fbbf24;
-  --accent-gold-dim: rgba(251, 191, 36, 0.16);
-  --accent-emerald: #34d399;
   --accent-rose: #fb7185;
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
@@ -28,8 +159,8 @@
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
-  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
-  --font-sans: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, -apple-system, sans-serif;
+  --shadow-card: 0 10px 28px rgba(0, 0, 0, 0.38);
+  --font-sans: "Inter", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, -apple-system, sans-serif;
 }
 
 *, *::before, *::after {
@@ -39,7 +170,7 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: radial-gradient(circle at 15% 0%, #102042 0%, var(--bg-base) 55%);
+  background: radial-gradient(circle at 12% 0%, #1e1b4b 0%, var(--bg-base) 58%);
   background-attachment: fixed;
   color: var(--text-primary);
   font-family: var(--font-sans);
@@ -55,23 +186,18 @@ button, input, select, textarea {
   color: inherit;
 }
 
-button {
-  cursor: pointer;
-}
+button { cursor: pointer; }
 
-/* Scrollbar styling */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg-base); }
-::-webkit-scrollbar-thumb { background: #26395c; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #365080; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
 
-/* ==========================================================================
-   Layout & Header
-   ========================================================================== */
+/* Layout & Header */
 .app-container {
-  max-width: 1360px;
+  max-width: 1380px;
   margin: 0 auto;
-  padding: 16px 16px 32px;
+  padding: 16px 16px 40px;
 }
 
 .app-header {
@@ -81,7 +207,7 @@ button {
   justify-content: space-between;
   gap: 16px;
   padding: 18px 22px;
-  background: linear-gradient(135deg, rgba(19, 31, 55, 0.92), rgba(14, 22, 40, 0.92));
+  background: linear-gradient(135deg, rgba(27, 39, 64, 0.96), rgba(11, 17, 32, 0.96));
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
@@ -98,7 +224,7 @@ button {
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  background: linear-gradient(135deg, #0ea5e9, #6366f1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -108,10 +234,10 @@ button {
 
 .brand h1 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.24rem;
   font-weight: 800;
   letter-spacing: 0.02em;
-  background: linear-gradient(90deg, #ffffff, #7dd3fc, #fde68a);
+  background: linear-gradient(90deg, #ffffff, #7dd3fc, #a5b4fc);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -125,34 +251,30 @@ button {
 .header-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   font-size: 0.78rem;
   color: var(--text-secondary);
 }
 
 .stat-pill {
-  background: rgba(10, 16, 31, 0.7);
+  background: rgba(10, 16, 29, 0.82);
   border: 1px solid var(--border-subtle);
-  padding: 5px 11px;
+  padding: 5px 12px;
   border-radius: 999px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-.stat-pill strong {
-  color: var(--accent-cyan);
-}
+.stat-pill strong { color: var(--accent-cyan); }
 
-/* ==========================================================================
-   Main Navigation Tabs
-   ========================================================================== */
+/* Main Navigation Tabs */
 .main-tabs {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 20px;
-  background: rgba(14, 22, 40, 0.8);
+  background: rgba(21, 31, 51, 0.88);
   padding: 6px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
@@ -176,32 +298,24 @@ button {
 
 .tab-btn:hover {
   color: var(--text-primary);
-  background: rgba(56, 189, 248, 0.08);
+  background: rgba(56, 189, 248, 0.1);
 }
 
 .tab-btn.active {
-  color: #070c17;
-  background: linear-gradient(135deg, #38bdf8, #60a5fa);
+  color: #0b1120;
+  background: linear-gradient(135deg, #38bdf8, #34d399);
   box-shadow: 0 4px 14px rgba(56, 189, 248, 0.35);
 }
 
-.tab-panel {
-  display: none;
-  animation: fadeIn 0.22s ease;
-}
-
-.tab-panel.active {
-  display: block;
-}
+.tab-panel { display: none; animation: fadeIn 0.2s ease; }
+.tab-panel.active { display: block; }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ==========================================================================
-   Cards, Grids & Common Controls
-   ========================================================================== */
+/* Grids, Cards & Controls */
 .grid-2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -210,15 +324,13 @@ button {
 
 .grid-planner {
   display: grid;
-  grid-template-columns: 420px minmax(0, 1fr);
+  grid-template-columns: 430px minmax(0, 1fr);
   gap: 20px;
   align-items: start;
 }
 
 @media (max-width: 980px) {
-  .grid-planner, .grid-2 {
-    grid-template-columns: 1fr;
-  }
+  .grid-planner, .grid-2 { grid-template-columns: 1fr; }
 }
 
 .card {
@@ -228,6 +340,7 @@ button {
   padding: 18px;
   box-shadow: var(--shadow-card);
   margin-bottom: 18px;
+  overflow: visible;
 }
 
 .card-header {
@@ -238,7 +351,7 @@ button {
   gap: 10px;
   margin-bottom: 14px;
   padding-bottom: 10px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 .card-title {
@@ -264,9 +377,7 @@ button {
   box-shadow: 0 0 8px var(--accent-gold);
 }
 
-.form-group {
-  margin-bottom: 14px;
-}
+.form-group { margin-bottom: 14px; }
 
 .form-label {
   display: block;
@@ -308,33 +419,16 @@ button {
   white-space: nowrap;
 }
 
-.btn:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--border-strong);
-}
+.btn:hover { background: var(--bg-card-hover); border-color: var(--border-strong); }
 
 .btn-primary {
-  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  background: linear-gradient(135deg, #0ea5e9, #4f46e5);
   border-color: transparent;
   color: #fff;
   box-shadow: 0 4px 14px rgba(14, 165, 233, 0.35);
 }
 
-.btn-primary:hover {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
-}
-
-.btn-gold {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  border-color: transparent;
-  color: #070c17;
-  font-weight: 800;
-}
-
-.btn-gold:hover {
-  filter: brightness(1.08);
-}
+.btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
 
 .btn-emerald {
   background: linear-gradient(135deg, #10b981, #059669);
@@ -343,34 +437,131 @@ button {
   font-weight: 700;
 }
 
-.btn-emerald:hover {
-  filter: brightness(1.1);
+.btn-emerald:hover { filter: brightness(1.1); }
+
+.btn-gold {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border-color: transparent;
+  color: #0b1120;
+  font-weight: 800;
 }
 
+.btn-gold:hover { filter: brightness(1.08); }
+
 .btn-danger {
-  background: rgba(251, 113, 133, 0.12);
-  border-color: rgba(251, 113, 133, 0.35);
+  background: rgba(251, 113, 133, 0.14);
+  border-color: rgba(251, 113, 133, 0.38);
   color: var(--accent-rose);
 }
 
-.btn-danger:hover {
-  background: rgba(251, 113, 133, 0.22);
+.btn-danger:hover { background: rgba(251, 113, 133, 0.26); }
+
+.btn-sm { padding: 6px 10px; font-size: 0.78rem; }
+.btn-block { width: 100%; padding: 12px 16px; font-size: 0.96rem; }
+
+.inline-flex-gap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
-.btn-sm {
-  padding: 5px 10px;
-  font-size: 0.78rem;
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
 }
 
-.btn-block {
+.checkbox-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-cyan);
+}
+
+/* Custom Searchable Combobox */
+.combo-wrap { position: relative; width: 100%; }
+
+.combo-input {
   width: 100%;
-  padding: 12px 16px;
-  font-size: 0.96rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 9px 56px 9px 12px;
+  color: var(--text-primary);
+  outline: none;
 }
 
-/* ==========================================================================
-   Skill Badges (Rainbow / Gold / White)
-   ========================================================================== */
+.combo-input:focus {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 3px var(--accent-cyan-glow);
+}
+
+.combo-clear, .combo-toggle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 4px 6px;
+  line-height: 1;
+}
+
+.combo-toggle { right: 6px; font-size: 0.72rem; }
+.combo-clear { right: 28px; font-size: 1rem; }
+.combo-clear:hover, .combo-toggle:hover { color: var(--text-primary); }
+
+.combo-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  background: #090f1d;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.72);
+  z-index: 2000;
+  display: none;
+}
+
+.combo-list.open { display: block; }
+
+.combo-item {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  font-size: 0.85rem;
+}
+
+.combo-item:hover, .combo-item.highlighted { background: rgba(56, 189, 248, 0.2); }
+
+.combo-item-meta {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  text-align: right;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combo-empty {
+  padding: 14px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+/* Skill Badges */
 .skill-badge {
   display: inline-flex;
   align-items: center;
@@ -384,132 +575,56 @@ button {
 }
 
 .skill-rainbow {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.24), rgba(168, 85, 247, 0.28), rgba(251, 191, 36, 0.24));
-  border: 1px solid rgba(192, 132, 252, 0.7);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.28), rgba(168, 85, 247, 0.34), rgba(251, 191, 36, 0.28));
+  border: 1px solid rgba(192, 132, 252, 0.85);
   color: #e0f2fe;
-  box-shadow: 0 0 8px rgba(168, 85, 247, 0.25);
 }
 
 .skill-gold {
   background: rgba(245, 158, 11, 0.18);
-  border: 1px solid rgba(251, 191, 36, 0.65);
+  border: 1px solid rgba(251, 191, 36, 0.68);
   color: #fde68a;
 }
 
 .skill-white {
-  background: rgba(148, 163, 184, 0.14);
-  border: 1px solid rgba(203, 213, 225, 0.4);
+  background: rgba(148, 163, 184, 0.16);
+  border: 1px solid rgba(203, 213, 225, 0.42);
   color: #e2e8f0;
+}
+
+.skill-red {
+  background: rgba(244, 63, 94, 0.18);
+  border: 1px solid rgba(251, 113, 133, 0.68);
+  color: #fecdd3;
+}
+
+.skill-cat-tag {
+  font-size: 0.65rem;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #cbd5e1;
+  font-weight: 600;
 }
 
 .skill-badge .remove-x {
   cursor: pointer;
-  opacity: 0.75;
+  opacity: 0.78;
   font-weight: 800;
   margin-left: 2px;
 }
 
-.skill-badge .remove-x:hover {
-  opacity: 1;
-  color: #fff;
-}
+.skill-badge .remove-x:hover { opacity: 1; color: #fff; }
 
 .selected-skills-wrap {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  min-height: 30px;
+  min-height: 28px;
   margin-top: 8px;
 }
 
-/* ==========================================================================
-   Custom Searchable Combobox
-   ========================================================================== */
-.combo-wrap {
-  position: relative;
-  width: 100%;
-}
-
-.combo-input {
-  width: 100%;
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 9px 32px 9px 12px;
-  color: var(--text-primary);
-  outline: none;
-}
-
-.combo-input:focus {
-  border-color: var(--accent-cyan);
-  box-shadow: 0 0 0 3px var(--accent-cyan-glow);
-}
-
-.combo-clear {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 1rem;
-  padding: 2px 5px;
-}
-
-.combo-clear:hover {
-  color: var(--text-primary);
-}
-
-.combo-list {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  max-height: 320px;
-  overflow-y: auto;
-  background: #0d1629;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
-  z-index: 1000;
-  display: none;
-}
-
-.combo-list.open {
-  display: block;
-}
-
-.combo-item {
-  padding: 8px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  cursor: pointer;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
-  font-size: 0.85rem;
-}
-
-.combo-item:hover, .combo-item.highlighted {
-  background: rgba(56, 189, 248, 0.16);
-}
-
-.combo-item-meta {
-  font-size: 0.74rem;
-  color: var(--text-secondary);
-}
-
-.combo-empty {
-  padding: 12px;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 0.82rem;
-}
-
-/* ==========================================================================
-   Owned Parents List & Saved Routes List
-   ========================================================================== */
+/* Owned Parents List */
 .owned-list {
   display: flex;
   flex-direction: column;
@@ -524,12 +639,9 @@ button {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 11px 13px;
-  transition: border-color 0.15s;
 }
 
-.owned-item:hover {
-  border-color: var(--border-strong);
-}
+.owned-item:hover { border-color: var(--border-strong); }
 
 .owned-item-top {
   display: flex;
@@ -539,72 +651,19 @@ button {
   margin-bottom: 6px;
 }
 
-.owned-pal-name {
-  font-weight: 700;
-  font-size: 0.94rem;
-  color: var(--text-primary);
-}
+.owned-pal-name { font-weight: 700; font-size: 0.94rem; }
 
 .owned-pal-power {
   font-size: 0.74rem;
   color: var(--accent-cyan);
-  background: rgba(56, 189, 248, 0.1);
+  background: rgba(56, 189, 248, 0.12);
   padding: 2px 7px;
   border-radius: 999px;
   margin-left: 6px;
 }
 
-.owned-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.saved-routes-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-height: 420px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.saved-route-item {
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.saved-route-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.saved-route-title {
-  font-weight: 800;
-  font-size: 0.94rem;
-  color: var(--accent-gold);
-}
-
-.saved-route-meta {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-}
-
-/* ==========================================================================
-   Route Results, Tree Visualization & Checklist
-   ========================================================================== */
-.route-switcher {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 14px;
-}
+/* Route Results, Visual Family Tree & Checklist */
+.route-switcher { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .route-tab {
   padding: 7px 14px;
@@ -625,51 +684,28 @@ button {
 .result-summary-bar {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 18px;
   padding: 12px 16px;
-  background: linear-gradient(90deg, rgba(14, 165, 233, 0.12), rgba(251, 191, 36, 0.08));
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.14), rgba(16, 185, 129, 0.1));
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   margin-bottom: 16px;
 }
 
-.summary-metrics-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-}
+.summary-metric { display: flex; flex-direction: column; }
+.summary-metric span { font-size: 0.72rem; color: var(--text-secondary); }
+.summary-metric strong { font-size: 1.06rem; color: var(--accent-gold); }
 
-.summary-metric {
-  display: flex;
-  flex-direction: column;
-}
-
-.summary-metric span {
-  font-size: 0.72rem;
-  color: var(--text-secondary);
-}
-
-.summary-metric strong {
-  font-size: 1.08rem;
-  color: var(--accent-gold);
-}
-
-/* Visual Family Tree (Horizontal Bracket Style) */
 .tree-viewport {
   overflow-x: auto;
   padding: 18px 12px;
-  background: radial-gradient(circle at center, rgba(19, 31, 55, 0.75), rgba(7, 12, 23, 0.9));
+  background: radial-gradient(circle at center, rgba(27, 39, 64, 0.75), rgba(9, 15, 29, 0.94));
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   margin-bottom: 18px;
 }
 
-.tree-branch {
-  display: inline-flex;
-  align-items: center;
-}
+.tree-branch { display: inline-flex; align-items: center; }
 
 .tree-parents {
   display: flex;
@@ -732,18 +768,17 @@ button {
   border-radius: var(--radius-md);
   padding: 10px 12px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-  position: relative;
 }
 
 .tree-node.node-owned {
-  border-color: rgba(251, 191, 36, 0.7);
+  border-color: rgba(251, 191, 36, 0.72);
   background: linear-gradient(160deg, rgba(251, 191, 36, 0.12), var(--bg-card));
 }
 
 .tree-node.node-wild {
-  border-color: rgba(148, 163, 184, 0.35);
+  border-color: rgba(148, 163, 184, 0.38);
   border-style: dashed;
-  background: rgba(15, 23, 42, 0.85);
+  background: rgba(15, 23, 42, 0.9);
 }
 
 .tree-node.node-bred {
@@ -752,17 +787,12 @@ button {
 }
 
 .tree-node.node-goal {
-  border: 2px solid var(--accent-gold);
-  background: linear-gradient(160deg, rgba(52, 211, 153, 0.16), rgba(251, 191, 36, 0.12), var(--bg-card));
-  box-shadow: 0 0 22px rgba(251, 191, 36, 0.28);
+  border: 2px solid var(--accent-emerald);
+  background: linear-gradient(160deg, rgba(16, 185, 129, 0.2), rgba(56, 189, 248, 0.12), var(--bg-card));
+  box-shadow: 0 0 22px rgba(16, 185, 129, 0.28);
 }
 
-.node-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 5px;
-}
+.node-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
 
 .mini-badge {
   font-size: 0.66rem;
@@ -775,7 +805,7 @@ button {
 .badge-owned { background: rgba(251, 191, 36, 0.22); color: #fde68a; }
 .badge-wild { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; }
 .badge-bred { background: rgba(56, 189, 248, 0.22); color: #7dd3fc; }
-.badge-goal { background: linear-gradient(90deg, #10b981, #f59e0b); color: #070c17; }
+.badge-goal { background: linear-gradient(90deg, #10b981, #38bdf8); color: #0b1120; }
 .badge-special { background: rgba(244, 114, 182, 0.24); color: #fbcfe8; border: 1px solid rgba(244, 114, 182, 0.45); }
 
 .node-name {
@@ -788,30 +818,11 @@ button {
   gap: 6px;
 }
 
-.node-power {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
+.node-power { font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); }
+.node-skills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.node-skills .skill-badge { font-size: 0.68rem; padding: 2px 6px; }
 
-.node-skills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 6px;
-}
-
-.node-skills .skill-badge {
-  font-size: 0.68rem;
-  padding: 2px 6px;
-}
-
-/* Checklist */
-.checklist {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+.checklist { display: flex; flex-direction: column; gap: 8px; }
 
 .check-step {
   display: flex;
@@ -821,46 +832,24 @@ button {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  transition: opacity 0.2s;
+  cursor: pointer;
 }
 
-.check-step.done {
-  opacity: 0.55;
-  text-decoration: line-through;
-}
+.check-step.done { opacity: 0.55; text-decoration: line-through; }
 
 .check-step input[type="checkbox"] {
   width: 18px;
   height: 18px;
   margin-top: 2px;
-  accent-color: var(--accent-cyan);
-  cursor: pointer;
+  accent-color: var(--accent-emerald);
 }
 
-.step-body {
-  flex: 1;
-}
+.step-body { flex: 1; }
+.step-formula { font-weight: 700; font-size: 0.9rem; margin-bottom: 4px; }
+.step-sub { font-size: 0.78rem; color: var(--text-secondary); }
 
-.step-formula {
-  font-weight: 700;
-  font-size: 0.9rem;
-  margin-bottom: 4px;
-}
-
-.step-sub {
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-}
-
-/* ==========================================================================
-   Tables & Data Management
-   ========================================================================== */
-.sub-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-}
+/* Tables, Lookup & Saved Routes */
+.sub-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 
 .sub-tab-btn {
   padding: 8px 14px;
@@ -886,11 +875,7 @@ button {
   overflow-y: auto;
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.84rem;
-}
+table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
 
 th, td {
   padding: 10px 12px;
@@ -899,7 +884,7 @@ th, td {
 }
 
 th {
-  background: #0b1222;
+  background: #090f1d;
   color: var(--text-secondary);
   font-weight: 700;
   position: sticky;
@@ -907,17 +892,12 @@ th {
   z-index: 5;
 }
 
-tr:hover td {
-  background: rgba(56, 189, 248, 0.06);
-}
+tr:hover td { background: rgba(56, 189, 248, 0.06); }
 
-/* ==========================================================================
-   Single Calc & Reverse Lookup
-   ========================================================================== */
 .calc-result-box {
   padding: 18px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.14), rgba(19, 31, 55, 0.9));
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.14), rgba(27, 39, 64, 0.9));
   border: 1px solid var(--border-strong);
   text-align: center;
 }
@@ -929,127 +909,28 @@ tr:hover td {
   margin: 6px 0;
 }
 
-/* ==========================================================================
-   Subtle Footer (Admin Login Entry)
-   ========================================================================== */
-.app-footer {
-  margin-top: 28px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(148, 163, 184, 0.08);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.72rem;
-  color: var(--text-muted);
+.saved-route-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 10px;
 }
 
-.admin-trigger-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  opacity: 0.45;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: opacity 0.2s, color 0.2s, background 0.2s;
-}
+.saved-route-meta { font-size: 0.76rem; color: var(--text-secondary); margin-top: 4px; }
 
-.admin-trigger-btn:hover {
-  opacity: 0.95;
-  color: var(--accent-cyan);
-  background: rgba(56, 189, 248, 0.08);
-}
-
-.admin-trigger-btn.logged-in {
-  opacity: 0.9;
-  color: var(--accent-gold);
-}
-
-/* ==========================================================================
-   Toast & Modal (No alert/confirm)
-   ========================================================================== */
-.toast-container {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.toast {
-  background: #0f172a;
-  border: 1px solid var(--accent-cyan);
-  color: #fff;
-  padding: 11px 16px;
-  border-radius: var(--radius-sm);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
-  font-size: 0.85rem;
-  font-weight: 600;
-  animation: slideUp 0.2s ease;
-}
-
-.toast.error { border-color: var(--accent-rose); color: #fecdd3; }
-.toast.success { border-color: var(--accent-emerald); color: #d1fae5; }
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(3, 7, 18, 0.78);
-  backdrop-filter: blur(4px);
-  display: none;
+.badge-count {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  z-index: 900;
-  padding: 16px;
-}
-
-.modal-overlay.open {
-  display: flex;
-}
-
-.modal-box {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  width: 100%;
-  max-width: 540px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
-}
-
-.modal-title {
-  margin: 0 0 12px;
-  font-size: 1.08rem;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.22);
+  color: var(--accent-cyan);
+  font-size: 0.72rem;
   font-weight: 800;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.checkbox-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  user-select: none;
-}
-
-.checkbox-row input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent-cyan);
 }
 
 .empty-state {
@@ -1065,11 +946,101 @@ tr:hover td {
   margin-bottom: 6px;
 }
 
-.inline-flex-gap {
+/* Footer (Subtle Admin Login), Modal & Toast */
+.app-footer {
+  margin-top: 32px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
   align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.admin-footer-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  opacity: 0.65;
+  transition: all 0.2s ease;
+}
+
+.admin-footer-btn:hover {
+  opacity: 1;
+  color: var(--text-secondary);
+  border-color: var(--border-subtle);
+  background: rgba(27, 39, 64, 0.6);
+}
+
+.admin-footer-btn.admin-active {
+  opacity: 1;
+  color: var(--accent-gold);
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  background: #090f1d;
+  border: 1px solid var(--accent-cyan);
+  color: #fff;
+  padding: 11px 16px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.toast.error { border-color: var(--accent-rose); color: #fecdd3; }
+.toast.success { border-color: var(--accent-emerald); color: #d1fae5; }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 7, 18, 0.78);
+  backdrop-filter: blur(4px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2500;
+  padding: 16px;
+}
+
+.modal-overlay.open { display: flex; }
+
+.modal-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  width: 100%;
+  max-width: 540px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+  overflow: visible;
+}
+
+.modal-title { margin: 0 0 12px; font-size: 1.08rem; font-weight: 800; }
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
 }
 </style>
 </head>
@@ -1089,7 +1060,7 @@ tr:hover td {
       </div>
       <div>
         <h1>Palworld 複数親・最短合流ルート検索ツール</h1>
-        <p>Steam版日本語準拠 ・ 完全オフライン動作 ・ 最短家系図自動生成＆ルート保存対応</p>
+        <p>Steam版日本語準拠 ・ 全298体＆最新123パッシブ完全内蔵 ・ 完全オフライン動作＆ルート保存対応</p>
       </div>
     </div>
     <div class="header-stats" id="headerStats"></div>
@@ -1097,14 +1068,14 @@ tr:hover td {
 
   <!-- Main Navigation Tabs -->
   <nav class="main-tabs" role="tablist">
-    <button class="tab-btn active" data-tab="planner" role="tab">
+    <button class="tab-btn active" data-tab="planner" role="tab" type="button">
       <span>🔀</span> 最短合流ルート検索
     </button>
-    <button class="tab-btn" data-tab="lookup" role="tab">
+    <button class="tab-btn" data-tab="lookup" role="tab" type="button">
       <span>🔍</span> 単体配合・逆引きチェック
     </button>
-    <button class="tab-btn" id="tabBtnData" data-tab="data" role="tab" style="display:none;">
-      <span>⚙️</span> データ管理（管理者専用）
+    <button class="tab-btn" id="tabBtnData" data-tab="data" role="tab" type="button" style="display:none;">
+      <span>⚙️</span> データ管理（管理者）
     </button>
   </nav>
 
@@ -1113,7 +1084,7 @@ tr:hover td {
        ====================================================================== -->
   <section id="tab-planner" class="tab-panel active">
     <div class="grid-planner">
-      <!-- Left Column: Goal & Owned Parents -->
+      <!-- Left Column -->
       <div>
         <!-- Goal Setting -->
         <div class="card">
@@ -1122,28 +1093,28 @@ tr:hover td {
           </div>
 
           <div class="form-group">
-            <label class="form-label">目的のパル（ひらがな・カタカナ検索対応）</label>
+            <label class="form-label">目的のパル（図鑑No.1昇順・ひらがな/カタカナ/番号検索対応）</label>
             <div id="goalPalCombo"></div>
           </div>
 
           <div class="form-group">
-            <label class="form-label">継承させたいパッシブスキル（最大4つ）</label>
+            <label class="form-label">継承させたいパッシブスキル（最大4つ・カテゴリ/効果検索対応）</label>
             <div id="goalSkillCombo"></div>
             <div id="goalSkillsList" class="selected-skills-wrap"></div>
           </div>
 
-          <div class="form-group" style="margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(148,163,184,0.12);">
-            <label class="checkbox-row" style="margin-bottom: 10px;">
+          <div class="form-group" style="margin-top:14px; padding-top:12px; border-top:1px solid rgba(148,163,184,0.14);">
+            <label class="checkbox-row" style="margin-bottom:10px;">
               <input type="checkbox" id="optAllowWild" checked>
               <span>手持ち以外のパル（無スキル）を経由親として自動補完する</span>
             </label>
-            <label class="checkbox-row" style="margin-bottom: 10px;">
+            <label class="checkbox-row" style="margin-bottom:10px;">
               <input type="checkbox" id="optExcludeSpecialWild" checked>
               <span>特殊配合限定パルを野良親候補に含めない</span>
             </label>
-            <div class="inline-flex-gap" style="justify-content: space-between;">
+            <div class="inline-flex-gap" style="justify-content:space-between;">
               <label class="form-label" style="margin:0;">最大探索ステップ数（合計配合回数）</label>
-              <select id="optMaxSteps" class="select" style="width: 110px; padding: 6px 10px;">
+              <select id="optMaxSteps" class="select" style="width:120px; padding:6px 10px;">
                 <option value="2">2 ステップ</option>
                 <option value="3">3 ステップ</option>
                 <option value="4" selected>4 ステップ</option>
@@ -1153,7 +1124,7 @@ tr:hover td {
             </div>
           </div>
 
-          <button id="btnSearchRoute" class="btn btn-primary btn-block">
+          <button id="btnSearchRoute" class="btn btn-primary btn-block" type="button">
             🚀 最短合流ルートを検索
           </button>
         </div>
@@ -1163,8 +1134,8 @@ tr:hover td {
           <div class="card-header">
             <h2 class="card-title"><span class="dot"></span>手持ちの親パル登録</h2>
             <div class="inline-flex-gap">
-              <button id="btnLoadSample" class="btn btn-gold btn-sm">✨ サンプル手持ちをセット</button>
-              <button id="btnClearOwned" class="btn btn-danger btn-sm">全削除</button>
+              <button id="btnLoadSample" class="btn btn-gold btn-sm" type="button">✨ サンプル手持ちをセット</button>
+              <button id="btnClearOwned" class="btn btn-danger btn-sm" type="button">全削除</button>
             </div>
           </div>
 
@@ -1179,9 +1150,9 @@ tr:hover td {
             <div id="ownedDraftSkills" class="selected-skills-wrap"></div>
           </div>
 
-          <div class="inline-flex-gap" style="margin-bottom: 16px;">
-            <button id="btnAddOwned" class="btn btn-primary" style="flex:1;">＋ 手持ちリストに追加</button>
-            <button id="btnCancelEditOwned" class="btn" style="display:none;">キャンセル</button>
+          <div class="inline-flex-gap" style="margin-bottom:16px;">
+            <button id="btnAddOwned" class="btn btn-emerald" type="button" style="flex:1;">＋ 手持ちリストに追加</button>
+            <button id="btnCancelEditOwned" class="btn" type="button" style="display:none;">キャンセル</button>
           </div>
 
           <div class="form-label" style="display:flex; justify-content:space-between;">
@@ -1194,12 +1165,14 @@ tr:hover td {
 
       <!-- Right Column: Search Results -->
       <div>
-        <div class="card" style="min-height: 540px;">
+        <div class="card" style="min-height:540px;">
           <div class="card-header">
             <h2 class="card-title"><span class="dot"></span>最短合流ルート（家系図・手順）</h2>
             <div class="inline-flex-gap">
+              <button id="btnOpenSavedRoutes" class="btn btn-sm" type="button">
+                📂 保存済みルートを呼び出す <span id="savedRoutesBadge" class="badge-count">0</span>
+              </button>
               <span id="searchPerfBadge" style="font-size:0.76rem; color:var(--text-secondary);"></span>
-              <button id="btnOpenSavedRoutes" class="btn btn-sm">📂 保存済みルート (0)</button>
             </div>
           </div>
           <div id="routeResultArea">
@@ -1220,7 +1193,7 @@ tr:hover td {
        ====================================================================== -->
   <section id="tab-lookup" class="tab-panel">
     <div class="grid-2">
-      <!-- Single Breeding Calculator -->
+      <!-- Single Breed Calculator -->
       <div class="card">
         <div class="card-header">
           <h2 class="card-title"><span class="dot"></span>単体配合シミュレーター（親A × 親B）</h2>
@@ -1233,7 +1206,7 @@ tr:hover td {
           <label class="form-label">親B</label>
           <div id="singleParentBCombo"></div>
         </div>
-        <div id="singleCalcResult" class="calc-result-box">
+        <div id="singleCalcResult" class="calc-result-box" style="margin-top:16px;">
           <div style="color:var(--text-secondary); font-size:0.86rem;">親Aと親Bを選択すると、生まれるパルと計算式を即座に表示します。</div>
         </div>
       </div>
@@ -1241,24 +1214,24 @@ tr:hover td {
       <!-- Reverse Lookup -->
       <div class="card">
         <div class="card-header">
-          <h2 class="card-title"><span class="dot gold"></span>逆引き検索（このパルを生む親一覧）</h2>
+          <h2 class="card-title"><span class="dot gold"></span>逆引き検索（目的の子が生まれる親ペア一覧）</h2>
         </div>
         <div class="form-group">
-          <label class="form-label">目的のパル（子供）</label>
+          <label class="form-label">生み出したいパル（子供）</label>
           <div id="reverseTargetCombo"></div>
         </div>
         <div class="form-group">
-          <label class="form-label">親の名前で絞り込み（任意）</label>
+          <label class="form-label">親パル名で絞り込み</label>
           <input type="text" id="reverseFilterInput" class="input" placeholder="例: アヌビス、ペコドン...">
         </div>
-        <div id="reverseResultMeta" style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:8px;"></div>
-        <div class="table-wrap" style="max-height: 360px;">
+        <div id="reverseResultMeta" style="font-size:0.78rem; color:var(--accent-cyan); margin-bottom:8px;"></div>
+        <div class="table-wrap" style="max-height:360px;">
           <table>
             <thead>
               <tr>
-                <th>親A（配合値）</th>
-                <th>親B（配合値）</th>
-                <th>区分</th>
+                <th>親A</th>
+                <th>親B</th>
+                <th>種別</th>
               </tr>
             </thead>
             <tbody id="reverseResultBody">
@@ -1271,43 +1244,41 @@ tr:hover td {
   </section>
 
   <!-- ======================================================================
-       TAB 3: データ管理（管理者専用）
+       TAB 3: データ管理（管理者モード専用）
        ====================================================================== -->
   <section id="tab-data" class="tab-panel">
     <div class="card">
       <div class="card-header">
-        <h2 class="card-title"><span class="dot gold"></span>内蔵データ管理・アップデート対応（管理者モード）</h2>
+        <h2 class="card-title"><span class="dot"></span>データ管理・アップデート対応（管理者モード）</h2>
         <div class="inline-flex-gap">
-          <button id="btnOpenOpggImport" class="btn btn-gold btn-sm">📋 OP.GGコピペ一括更新</button>
-          <button id="btnExportJson" class="btn btn-primary btn-sm">📥 全データ JSON出力</button>
-          <button id="btnOpenImportJson" class="btn btn-sm">📤 JSON 読込</button>
-          <button id="btnResetDefaultData" class="btn btn-danger btn-sm">↺ 初期データにリセット</button>
-          <button id="btnAdminLogoutTop" class="btn btn-sm">🔓 ログアウト</button>
+          <button id="btnOpenOpggImport" class="btn btn-gold btn-sm" type="button">📋 OP.GGコピペ一括更新</button>
+          <button id="btnExportJson" class="btn btn-sm" type="button">⬇️ JSON出力</button>
+          <button id="btnOpenImportJson" class="btn btn-sm" type="button">⬆️ JSON読込</button>
+          <button id="btnResetDefaultData" class="btn btn-danger btn-sm" type="button">🔄 初期データに戻す</button>
         </div>
       </div>
 
       <div class="sub-tabs">
-        <button class="sub-tab-btn active" data-subtab="pals">パル一覧</button>
-        <button class="sub-tab-btn" data-subtab="specials">特殊配合リスト</button>
-        <button class="sub-tab-btn" data-subtab="skills">パッシブスキル一覧</button>
+        <button class="sub-tab-btn active" data-subtab="pals" type="button">パル一覧（配合値・優先度）</button>
+        <button class="sub-tab-btn" data-subtab="specials" type="button">特殊配合リスト</button>
+        <button class="sub-tab-btn" data-subtab="skills" type="button">パッシブスキル一覧</button>
       </div>
 
       <!-- Subtab: Pals -->
       <div id="subtab-pals" class="subtab-panel">
         <div class="inline-flex-gap" style="justify-content:space-between; margin-bottom:12px;">
-          <div class="inline-flex-gap" style="flex:1; min-width:240px;">
-            <input type="text" id="filterPalsInput" class="input" style="max-width:260px;" placeholder="図鑑No・パル名で検索...">
+          <div class="inline-flex-gap" style="flex:1;">
+            <input type="text" id="filterPalsInput" class="input" placeholder="パル名・図鑑No・配合値で絞り込み..." style="max-width:260px;">
             <select id="sortPalsSelect" class="select" style="width:170px;">
-              <option value="dex" selected>図鑑No.順（昇順）</option>
-              <option value="power_asc">配合値順（昇順）</option>
-              <option value="power_desc">配合値順（降順）</option>
+              <option value="dex">図鑑No.昇順</option>
+              <option value="power_asc">配合値 昇順</option>
+              <option value="power_desc">配合値 降順</option>
               <option value="name">名前順</option>
             </select>
           </div>
           <div class="inline-flex-gap">
-            <button id="btnAddPalModal" class="btn btn-primary btn-sm">＋ 新規パル追加</button>
-            <button id="btnExportPalsCsv" class="btn btn-sm">CSV出力</button>
-            <button id="btnImportPalsCsv" class="btn btn-sm">CSV読込</button>
+            <button id="btnExportPalsCsv" class="btn btn-sm" type="button">CSV出力</button>
+            <button id="btnAddPalModal" class="btn btn-primary btn-sm" type="button">＋ 新規パル追加</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -1316,10 +1287,10 @@ tr:hover td {
               <tr>
                 <th>図鑑No</th>
                 <th>パル名</th>
-                <th>配合値 (Power)</th>
+                <th>配合値</th>
                 <th>同値優先度</th>
                 <th>特殊限定</th>
-                <th style="width:120px;">操作</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody id="tablePalsBody"></tbody>
@@ -1330,11 +1301,10 @@ tr:hover td {
       <!-- Subtab: Specials -->
       <div id="subtab-specials" class="subtab-panel" style="display:none;">
         <div class="inline-flex-gap" style="justify-content:space-between; margin-bottom:12px;">
-          <input type="text" id="filterSpecialsInput" class="input" style="max-width:300px;" placeholder="パル名で検索...">
+          <input type="text" id="filterSpecialsInput" class="input" placeholder="親または子のパル名で絞り込み..." style="max-width:280px;">
           <div class="inline-flex-gap">
-            <button id="btnAddSpecialModal" class="btn btn-primary btn-sm">＋ 特殊配合追加</button>
-            <button id="btnExportSpecialsCsv" class="btn btn-sm">CSV出力</button>
-            <button id="btnImportSpecialsCsv" class="btn btn-sm">CSV読込</button>
+            <button id="btnExportSpecialsCsv" class="btn btn-sm" type="button">CSV出力</button>
+            <button id="btnAddSpecialModal" class="btn btn-primary btn-sm" type="button">＋ 特殊配合追加</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -1344,7 +1314,7 @@ tr:hover td {
                 <th>親A</th>
                 <th>親B</th>
                 <th>生まれる子供</th>
-                <th style="width:100px;">操作</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody id="tableSpecialsBody"></tbody>
@@ -1355,11 +1325,10 @@ tr:hover td {
       <!-- Subtab: Skills -->
       <div id="subtab-skills" class="subtab-panel" style="display:none;">
         <div class="inline-flex-gap" style="justify-content:space-between; margin-bottom:12px;">
-          <input type="text" id="filterSkillsInput" class="input" style="max-width:300px;" placeholder="スキル名・効果で検索...">
+          <input type="text" id="filterSkillsInput" class="input" placeholder="スキル名・カテゴリ・効果で絞り込み..." style="max-width:280px;">
           <div class="inline-flex-gap">
-            <button id="btnAddSkillModal" class="btn btn-primary btn-sm">＋ 新規スキル追加</button>
-            <button id="btnExportSkillsCsv" class="btn btn-sm">CSV出力</button>
-            <button id="btnImportSkillsCsv" class="btn btn-sm">CSV読込</button>
+            <button id="btnExportSkillsCsv" class="btn btn-sm" type="button">CSV出力</button>
+            <button id="btnAddSkillModal" class="btn btn-primary btn-sm" type="button">＋ 新規スキル追加</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -1368,8 +1337,9 @@ tr:hover td {
               <tr>
                 <th>スキル名</th>
                 <th>ランク</th>
+                <th>分類</th>
                 <th>効果説明</th>
-                <th style="width:120px;">操作</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody id="tableSkillsBody"></tbody>
@@ -1381,15 +1351,15 @@ tr:hover td {
 
   <!-- Subtle Footer with Admin Login -->
   <footer class="app-footer">
-    <span>Palworld Breeding Planner (Offline Single-File Edition)</span>
-    <button id="btnAdminTrigger" class="admin-trigger-btn" type="button">🔒 管理者</button>
+    <span>Palworld 複数親・最短合流ルート検索ツール（ローカル完結・オフライン動作）</span>
+    <button id="btnAdminToggle" class="admin-footer-btn" type="button">🔒 管理者ログイン</button>
   </footer>
 </div>
 
-<!-- Hidden File Input for CSV/JSON Imports -->
-<input type="file" id="hiddenFileInput" style="display:none;" accept=".json,.csv,.txt">
+<!-- Hidden File Input for JSON Import -->
+<input type="file" id="hiddenFileInput" accept=".json,application/json" style="display:none;">
 
-<!-- Generic Modal -->
+<!-- Custom Modal -->
 <div id="modalOverlay" class="modal-overlay" role="dialog" aria-modal="true">
   <div class="modal-box">
     <h3 id="modalTitle" class="modal-title"></h3>
@@ -1398,211 +1368,351 @@ tr:hover td {
   </div>
 </div>
 
-<!-- Toast Notifications -->
+<!-- Toast Container -->
 <div id="toastContainer" class="toast-container"></div>
 
+<!-- ==========================================================================
+     メインアプリケーションスクリプト
+     ========================================================================== -->
 <script>
-/**
- * ============================================================================
- * Palworld 複数親・最短合流ルート検索ツール (正式版・全297体対応)
- * 完全オフライン単一HTML実装 + ルート保存機能 + 管理者ログイン機能
- * ============================================================================
- */
-(() => {
+(function () {
   "use strict";
 
-  const STORAGE_KEY_DATA = "palworld_planner_v4";
-  const STORAGE_KEY_OWNED = "palworld_planner_v4_owned";
-  const STORAGE_KEY_SAVED_ROUTES = "palworld_planner_v4_saved_routes";
-  const SESSION_KEY_ADMIN = "palworld_planner_v4_admin";
+  /* ==========================================================================
+   * 1. コンパクト内蔵マスターデータ（全298パル / 特殊配合 / 全123パッシブスキル）
+   * ========================================================================== */
+  const STORAGE_KEY_OWNED = "palworld_planner_v7";
+  const STORAGE_KEY_DATA = "palworld_planner_v7_data";
+  const STORAGE_KEY_ROUTES = "palworld_planner_v7_routes";
   const ADMIN_PASSWORD = "takenekokawaii5775";
 
-  /* --------------------------------------------------------------------------
-   * 1. 内蔵マスターデータ（OP.GG最新正式版・全297体）
-   *    [dexNo, name, power, order, isSpecialOnly(1|0)]
-   * -------------------------------------------------------------------------- */
-  const RAW_DEFAULT_PALS = [
-    ["184","シェルガドラ",30,3000,0],["192","シャオロン",40,4000,1],["191","ヒョウガオー",50,5000,1],["194","ノクサージュ",60,6000,1],["202","ジェッドラン",70,7000,1],
-    ["193","モスローン",80,8000,1],["197","レジェンディア",90,9000,1],["137B","ボルドラゴ",100,10000,1],["200B","グレイシャドウ",110,11000,1],["187","ボルゼクス",120,12000,1],
-    ["195B","ベラルージュ",130,13000,1],["171B","ヘルバーン",140,14000,1],["200","グレイシャル",150,15000,1],["201","ネプティオス",160,16000,1],["121B","アグニドラ",170,17000,1],
-    ["198","セイントール",180,18000,1],["199","ベイントール",190,19000,1],["142B","オシロガメ",200,20000,1],["159B","マグナイト",210,21000,1],["186B","ルナクイン",220,22000,1],
-    ["175","ハナミズチ",230,23000,0],["186","リリクイン",240,24000,1],["138B","ノロウゾー",250,25000,1],["159","テラナイト",260,26000,0],["157B","コスモディア",270,27000,1],
-    ["182","モノクローナ",280,28000,0],["183","ゴウカブキ",290,29000,0],["171","レイバーン",300,30000,0],["190","セレムーン",360,36000,1],["151B","モモエール",370,37000,1],
-    ["105B","ブリザンダー",380,38000,1],["174","センコ",390,39000,0],["196","ゼノドラン",400,40000,1],["137","ボルカイザー",410,41000,0],["161","オーマサンダ",420,42000,0],
-    ["130B","ライトロット",430,43000,1],["81B","ユキタロス",440,44000,1],["188B","イシス",450,45000,1],["131B","フロスドン",460,46000,1],["132B","グランドラー",470,47000,1],
-    ["139","アヌビス",480,48000,0],["158","ジオラーヴァ",490,49000,0],["188","ホルス",500,50000,1],["138","ウゴクゾー",510,51000,0],["176","ラピエール",520,52000,0],
-    ["177","アルセーヴ",530,53000,0],["54B","レイコーン",540,54000,1],["189","ゼノグリフ",550,55000,1],["160","アイギルガ",560,56000,0],["157","セレスディア",570,57000,1],
-    ["96B","チルバード",580,58000,1],["121","レヴィドラ",590,59000,0],["129B","フロスカノン",600,60000,1],["134B","トロピティ",610,61000,0],["195","ベラノワール",620,62000,1],
-    ["113B","ゴルクレス",630,63000,1],["99B","ゴルディング",640,64000,1],["116B","ソワレーヌ",650,65000,1],["151","コゴエール",710,71000,0],["97B","メラドーン",720,72000,1],
-    ["154","キンガゼル",730,73000,0],["122B","シヴァ",740,74000,1],["105","マグマンダー",750,75000,0],["179","マシュリー",760,76000,0],["94B","パリピドン",770,77000,1],
-    ["153","ヤンデリナ",780,78000,0],["142","オモシガメ",790,79000,0],["111B","カゲヌイ",800,80000,1],["170","ネモフィ",810,81000,0],["89B","チェリーナ",820,82000,1],
-    ["134","ヒエティ",830,83000,0],["85B","ヤミウチ",840,84000,1],["141B","ブッサンダー",850,85000,1],["114","クジャンナ",860,86000,0],["140","セクメト",870,87000,0],
-    ["97","アンドーン",880,88000,0],["180","ヴィランタン",890,89000,0],["83B","ムラサメ",900,90000,1],["80B","ライガルダ",960,96000,1],["178","メドゥーナ",970,97000,0],
-    ["135","オドロクロ",980,98000,0],["146","ゼノルーダ",990,99000,1],["169B","トノサマンボ",1000,100000,1],["115","マジョルナ",1010,101000,0],["185","エレパンダ",1020,102000,1],
-    ["110","トコナッツ",1030,103000,0],["132","ツンドラー",1040,104000,0],["104","イグニクス",1050,105000,0],["129","ボルカノン",1060,106000,0],["87B","ブリザモス",1070,107000,1],
-    ["108B","スプラドン",1080,108000,1],["94","ペコドン",1090,109000,0],["72B","チョコザラシ",1100,110000,1],["131","ジオルドン",1110,111000,0],["99","デスティング",1120,112000,0],
-    ["80","ヘルガルダ",1130,113000,0],["150","オーメン",1140,114000,0],["130","ナイトロット",1150,115000,0],["152","ラベロット",1160,116000,0],["120","ヨミーラ",1170,117000,0],
-    ["181","ホシノコ",1180,118000,0],["156","ドスコイヌ",1190,119000,0],["122","スザク",1200,120000,0],["124","フェスキー",1210,121000,0],["41B","アズルーナ",1220,578,1],
-    ["148","ナイトメアリ",1230,123000,0],["106","ココヤンバ",1240,124000,0],["143","ニャニミテ",1250,125000,0],["119","チルウィッチ",1260,126000,0],["112B","シンエンオ",1270,127000,1],
-    ["113","グラクレス",1280,128000,0],["56B","ユキカゲ",1290,129000,1],["124B","フォレスキー",1300,130000,1],["91B","アビスゴート",1310,131000,1],["148B","グラスメアリ",1320,132000,1],
-    ["37B","ゴルメッコ",1330,577,1],["87","グランモス",1340,134000,0],["173","フラペック",1350,135000,0],["112","ゴクエンオ",1360,136000,0],["169","オーマンボ",1370,137000,0],
-    ["108","ラブラドン",1380,138000,0],["147","プラムルリム",1390,139000,0],["172","ダイナモフ",1400,140000,0],["90","リーファン",1410,141000,0],["128","オオタチウオ",1420,142000,0],
-    ["64B","シロカバネ",1430,143000,1],["102B","ライゾー",1440,144000,1],["118B","ベノッポ",1450,145000,0],["155","ワンフー",1460,146000,0],["91","ヘルゴート",1470,147000,0],
-    ["66","ヴィオレッタ",1480,148000,0],["78B","フォレーオ",1490,149000,1],["163B","ドンツム",1500,150000,1],["141","ブッサソリ",1510,151000,0],["118","キノッポ",1520,152000,0],
-    ["21B","アオパオー",1530,153000,1],["168","ウラミィ",1540,154000,0],["107","ドリタス",1550,155000,0],["85","ツジギリ",1560,156000,0],["65","ヤミトバリ",1570,157000,0],
-    ["100B","ハグユー",1580,158000,1],["128B","ヒノタチウオ",1590,159000,1],["98B","フリーズマ",1600,160000,1],["149B","フユマル",1610,161000,1],["109B","ゴルドドン",1620,576,1],
-    ["48B","ユメンダコ",1630,163000,1],["63B","シルティア",1640,164000,1],["64","カバネドリ",1650,165000,0],["72","バニザラシ",1660,166000,0],["111","シラヌイ",1670,167000,0],
-    ["165","バトラビー",1680,168000,0],["96","ライバード",1690,169000,0],["136","カプリリス",1700,170000,0],["117","ソルレイス",1710,171000,0],["89","フラリーナ",1720,172000,0],
-    ["71","モモンチュラ",1730,173000,0],["144","ミミドッグ",1740,174000,1],["167","ノンビリリ",1750,175000,0],["149","クロマル",1760,176000,0],["166","フードール",1770,177000,0],
-    ["163","デンツム",1780,178000,0],["68","クインビーナ",1790,179000,0],["79B","クレメーナ",1800,180000,1],["116","シルキーヌ",1810,181000,0],["145","ゼノベーダ",1820,182000,1],
-    ["41","アズレーン",1830,183000,0],["75B","スナペント",1840,184000,1],["18B","ペンキッド",1850,573,1],["9B","ドスガエル",1860,186000,1],["93B","サラブラック",1870,187000,1],
-    ["74B","ゴリガイア",1880,188000,1],["84B","ビリビリュー",1890,189000,1],["162","ニャルル",1900,190000,0],["92B","ヤミナラシ",1910,191000,1],["98","イヌズマ",1920,192000,0],
-    ["101","ツララジカ",1930,193000,0],["34B","ベノゴート",1940,194000,1],["103B","モモチョ",1950,195000,1],["83","ムラクモ",1960,196000,0],["95","フブキツネ",1970,197000,0],
-    ["93","サラブレイズ",1980,198000,0],["125","フワフラワ",1990,199000,0],["164","ポポフィア",2000,200000,0],["82","ミステリア",2010,201000,0],["81","モリタロス",2020,202000,0],
-    ["39B","メリコロネ",2030,203000,1],["79","クレメーオ",2040,204000,0],["76B","サンドロ",2050,205000,1],["102","ササゾー",2060,206000,0],["18","キャプペン",2070,207000,0],
-    ["78","フォレーナ",2080,208000,0],["69","ラブマンダー",2090,209000,0],["84","アロアリュー",2100,210000,0],["56","ツキカゲ",2110,211000,0],["70","ニャンギマリ",2120,212000,0],
-    ["86","コチワニ",2130,213000,0],["74","ゴリレイジ",2140,214000,0],["36","ドンモップ",2150,215000,0],["123","トリステップ",2210,221000,0],["21","アルパオー",2220,222000,0],
-    ["127","ヤクモマル",2230,223000,0],["88B","ヒグルミ",2240,581,1],["50","ニャンシー",2250,225000,0],["76","フェザーロ",2260,226000,0],["54","ライコーン",2270,227000,0],
-    ["63","シルフィア",2280,228000,0],["109","トドドドン",2290,229000,0],["5B","モモノスケ",2300,575,1],["126","コロマジロ",2310,231000,0],["58","ブルフェルノ",2320,232000,0],
-    ["103","オコチョ",2330,233000,0],["52","ニャンバット",2340,234000,0],["67","ビーナイト",2350,235000,0],["62","パチマル",2360,236000,0],["57","マスクロウ",2370,237000,0],
-    ["7B","エレカイト",2380,574,1],["133","ユキボウ",2390,239000,0],["92","カミナラシ",2400,240000,0],["37","ヘルメッコ",2410,241000,0],["100","ハグミー",2420,242000,0],
-    ["55B","シャーマンダー",2430,243000,1],["75","シーペント",2440,244000,0],["88","ガブルミ",2450,245000,0],["44B","ヨモギウサ",2460,246000,1],["43B","マグピス",2470,247000,0],
-    ["59","モコチッチ",2480,248000,0],["17B","デンタマ",2490,572,1],["29B","ユキツネ",2500,250000,1],["38B","オバケナワ",2510,251000,1],["47","リオリネ",2520,252000,0],
-    ["48","ヒメンダコ",2530,253000,0],["30B","ユメイカ",2540,571,1],["55","シャーキッド",2550,255000,0],["51","ホークウィン",2560,256000,0],["49","エアムルグ",2570,257000,0],
-    ["32B","ヤマガミ",2580,258000,1],["46","ユララン",2590,259000,0],["9","ブシガエル",2600,260000,0],["34","ベリゴート",2610,261000,0],["61","パピテフ",2620,262000,0],
-    ["10","モモンパ",2630,263000,0],["73B","チリザード",2640,264000,1],["45","クララン",2650,265000,0],["77","ポプリーナ",2660,266000,0],["73","ダリザード",2670,267000,0],
-    ["33","ガウルフ",2680,268000,0],["60","イバラヒメ",2690,269000,0],["25","ラヴィ",2700,270000,0],["32","ツノガミ",2710,271000,0],["20","メルパカ",2720,272000,0],
-    ["53","クルットリ",2730,273000,0],["7","ルミカイト",2740,274000,0],["27B","チルテト",2750,275000,1],["2","ツッパニャン",2760,276000,0],["30","ヤミイカ",2770,277000,0],
-    ["38","シメナワ",2780,278000,0],["31","モグルン",2790,279000,0],["40","ミルカルビ",2800,280000,0],["43","ケルピス",2810,281000,0],["39","メリポップ",2820,282000,0],
-    ["23B","カレッパ",2830,283000,1],["35","コモップ",2840,284000,0],["15B","コチグリ",2850,285000,1],["44","ヒメウサ",2860,286000,0],["26","ヒノコジカ",2870,287000,0],
-    ["28","イノボウ",2880,288000,0],["8","ミルフィー",2890,289000,0],["23","エテッパ",2900,290000,0],["22","ネムラム",2910,291000,0],["24","ルナティ",2920,292000,0],
-    ["13","ポチムネ",2930,293000,0],["19","ホウロック",2940,294000,0],["12","ナエモチ",2950,295000,0],["17","ペンタマ",2960,296000,0],["14","ポワワ",2970,297000,0],
-    ["5","カモノスケ",2980,298000,0],["29","キツネビ",2990,299000,0],["16","ンダコアラ",3000,300000,0],["42","ボルトラ",3010,301000,0],["4","クルリス",3020,302000,0],
-    ["15","パチグリ",3030,303000,0],["27","ニャオテト",3040,304000,0],["1","モコロン",3050,305000,0],["6","タマモ",3060,306000,0],["11","チョロゾウ",3070,307000,0],
-    ["3","タマコッコ",3080,308000,0],["-1","レッドスライム",3100,310000,1],["-1","かがやくスライム",3100,310000,1],["-1","あくまのめだま",3100,310000,1],["-1","グリーンスライム",3100,310000,1],
-    ["-1","かがやくコウモリ",3100,310000,1],["-1","どうくつコウモリ",3100,310000,1],["-1","クトゥルフのめだま",3100,310000,1],["-1","ブルースライム",3100,310000,1],["-1","パープルスライム",3100,310000,1],
-    ["-1","レインボースライム",3100,310000,1],["-1","まほうのつるぎ",3100,310000,1]
+  /* [dex, name, power, priority, specialOnly(1/0)] - 全298体 */
+  const RAW_PALS = [
+    ["184","シェルガドラ",30,3000,0],["192","シャオロン",40,4000,1],["191","ヒョウガオー",50,5000,1],["194","ノクサージュ",60,6000,1],
+    ["202","ジェッドラン",70,7000,1],["193","モスローン",80,8000,1],["197","レジェンディア",90,9000,1],["137B","ボルドラゴ",100,10000,1],
+    ["200B","グレイシャドウ",110,11000,1],["187","ボルゼクス",120,12000,1],["195B","ベラルージュ",130,13000,1],["171B","ヘルバーン",140,14000,1],
+    ["200","グレイシャル",150,15000,1],["201","ネプティオス",160,16000,1],["121B","アグニドラ",170,17000,1],["198","セイントール",180,18000,1],
+    ["199","ベイントール",190,19000,1],["142B","オシロガメ",200,20000,1],["159B","マグナイト",210,21000,1],["186B","ルナクイン",220,22000,1],
+    ["175","ハナミズチ",230,23000,0],["186","リリクイン",240,24000,1],["138B","ノロウゾー",250,25000,1],["159","テラナイト",260,26000,0],
+    ["157B","コスモディア",270,27000,1],["182","モノクローナ",280,28000,0],["183","ゴウカブキ",290,29000,0],["171","レイバーン",300,30000,0],
+    ["190","セレムーン",360,36000,1],["151B","モモエール",370,37000,1],["105B","ブリザンダー",380,38000,1],["174","センコ",390,39000,0],
+    ["196","ゼノドラン",400,40000,1],["137","ボルカイザー",410,41000,0],["161","オーマサンダ",420,42000,0],["130B","ライトロット",430,43000,1],
+    ["81B","ユキタロス",440,44000,1],["188B","イシス",450,45000,1],["131B","フロスドン",460,46000,1],["132B","グランドラー",470,47000,1],
+    ["139","アヌビス",480,48000,0],["158","ジオラーヴァ",490,49000,0],["188","ホルス",500,50000,1],["138","ウゴクゾー",510,51000,0],
+    ["176","ラピエール",520,52000,0],["177","アルセーヴ",530,53000,0],["54B","レイコーン",540,54000,1],["189","ゼノグリフ",550,55000,1],
+    ["160","アイギルガ",560,56000,0],["157","セレスディア",570,57000,1],["96B","チルバード",580,58000,1],["121","レヴィドラ",590,59000,0],
+    ["129B","フロスカノン",600,60000,1],["134B","トロピティ",610,61000,0],["195","ベラノワール",620,62000,1],["113B","ゴルクレス",630,63000,1],
+    ["99B","ゴルディング",640,64000,1],["116B","ソワレーヌ",650,65000,1],["151","コゴエール",710,71000,0],["97B","メラドーン",720,72000,1],
+    ["154","キンガゼル",730,73000,0],["122B","シヴァ",740,74000,1],["105","マグマンダー",750,75000,0],["179","マシュリー",760,76000,0],
+    ["94B","パリピドン",770,77000,1],["153","ヤンデリナ",780,78000,0],["142","オモシガメ",790,79000,0],["111B","カゲヌイ",800,80000,1],
+    ["170","ネモフィ",810,81000,0],["89B","チェリーナ",820,82000,1],["134","ヒエティ",830,83000,0],["85B","ヤミウチ",840,84000,1],
+    ["141B","ブッサンダー",850,85000,1],["114","クジャンナ",860,86000,0],["140","セクメト",870,87000,0],["97","アンドーン",880,88000,0],
+    ["180","ヴィランタン",890,89000,0],["83B","ムラサメ",900,90000,1],["80B","ライガルダ",960,96000,1],["178","メドゥーナ",970,97000,0],
+    ["135","オドロクロ",980,98000,0],["146","ゼノルーダ",990,99000,1],["169B","トノサマンボ",1000,100000,1],["115","マジョルナ",1010,101000,0],
+    ["185","エレパンダ",1020,102000,1],["110","トコナッツ",1030,103000,0],["132","ツンドラー",1040,104000,0],["104","イグニクス",1050,105000,0],
+    ["129","ボルカノン",1060,106000,0],["87B","ブリザモス",1070,107000,1],["108B","スプラドン",1080,108000,1],["94","ペコドン",1090,109000,0],
+    ["72B","チョコザラシ",1100,110000,1],["131","ジオルドン",1110,111000,0],["99","デスティング",1120,112000,0],["80","ヘルガルダ",1130,113000,0],
+    ["150","オーメン",1140,114000,0],["130","ナイトロット",1150,115000,0],["152","ラベロット",1160,116000,0],["120","ヨミーラ",1170,117000,0],
+    ["181","ホシノコ",1180,118000,0],["156","ドスコイヌ",1190,119000,0],["122","スザク",1200,120000,0],["124","フェスキー",1210,121000,0],
+    ["41B","アズルーナ",1220,578,1],["148","ナイトメアリ",1230,123000,0],["106","ココヤンバ",1240,124000,0],["143","ニャニミテ",1250,125000,0],
+    ["119","チルウィッチ",1260,126000,0],["112B","シンエンオ",1270,127000,1],["113","グラクレス",1280,128000,0],["56B","ユキカゲ",1290,129000,1],
+    ["124B","フォレスキー",1300,130000,1],["91B","アビスゴート",1310,131000,1],["148B","グラスメアリ",1320,132000,1],["37B","ゴルメッコ",1330,577,1],
+    ["87","グランモス",1340,134000,0],["173","フラペック",1350,135000,0],["112","ゴクエンオ",1360,136000,0],["169","オーマンボ",1370,137000,0],
+    ["108","ラブラドン",1380,138000,0],["147","プラムルリム",1390,139000,0],["172","ダイナモフ",1400,140000,0],["90","リーファン",1410,141000,0],
+    ["128","オオタチウオ",1420,142000,0],["64B","シロカバネ",1430,143000,1],["102B","ライゾー",1440,144000,1],["118B","ベノッポ",1450,145000,0],
+    ["155","ワンフー",1460,146000,0],["91","ヘルゴート",1470,147000,0],["66","ヴィオレッタ",1480,148000,0],["78B","フォレーオ",1490,149000,1],
+    ["163B","ドンツム",1500,150000,1],["141","ブッサソリ",1510,151000,0],["118","キノッポ",1520,152000,0],["21B","アオパオー",1530,153000,1],
+    ["168","ウラミィ",1540,154000,0],["107","ドリタス",1550,155000,0],["85","ツジギリ",1560,156000,0],["65","ヤミトバリ",1570,157000,0],
+    ["100B","ハグユー",1580,158000,1],["128B","ヒノタチウオ",1590,159000,1],["98B","フリーズマ",1600,160000,1],["149B","フユマル",1610,161000,1],
+    ["109B","ゴルドドン",1620,576,1],["48B","ユメンダコ",1630,163000,1],["63B","シルティア",1640,164000,1],["64","カバネドリ",1650,165000,0],
+    ["72","バニザラシ",1660,166000,0],["111","シラヌイ",1670,167000,0],["165","バトラビー",1680,168000,0],["96","ライバード",1690,169000,0],
+    ["136","カプリリス",1700,170000,0],["117","ソルレイス",1710,171000,0],["89","フラリーナ",1720,172000,0],["71","モモンチュラ",1730,173000,0],
+    ["144","ミミドッグ",1740,174000,1],["167","ノンビリリ",1750,175000,0],["149","クロマル",1760,176000,0],["166","フードール",1770,177000,0],
+    ["163","デンツム",1780,178000,0],["68","クインビーナ",1790,179000,0],["79B","クレメーナ",1800,180000,1],["116","シルキーヌ",1810,181000,0],
+    ["145","ゼノベーダ",1820,182000,1],["41","アズレーン",1830,183000,0],["75B","スナペント",1840,184000,1],["18B","ペンキッド",1850,573,1],
+    ["9B","ドスガエル",1860,186000,1],["93B","サラブラック",1870,187000,1],["74B","ゴリガイア",1880,188000,1],["84B","ビリビリュー",1890,189000,1],
+    ["162","ニャルル",1900,190000,0],["92B","ヤミナラシ",1910,191000,1],["98","イヌズマ",1920,192000,0],["101","ツララジカ",1930,193000,0],
+    ["34B","ベノゴート",1940,194000,1],["103B","モモチョ",1950,195000,1],["83","ムラクモ",1960,196000,0],["95","フブキツネ",1970,197000,0],
+    ["93","サラブレイズ",1980,198000,0],["125","フワフラワ",1990,199000,0],["164","ポポフィア",2000,200000,0],["82","ミステリア",2010,201000,0],
+    ["81","モリタロス",2020,202000,0],["39B","メリコロネ",2030,203000,1],["79","クレメーオ",2040,204000,0],["76B","サンドロ",2050,205000,1],
+    ["102","ササゾー",2060,206000,0],["18","キャプペン",2070,207000,0],["78","フォレーナ",2080,208000,0],["69","ラブマンダー",2090,209000,0],
+    ["84","アロアリュー",2100,210000,0],["56","ツキカゲ",2110,211000,0],["70","ニャンギマリ",2120,212000,0],["86","コチワニ",2130,213000,0],
+    ["74","ゴリレイジ",2140,214000,0],["36","ドンモップ",2150,215000,0],["123","トリステップ",2210,221000,0],["21","アルパオー",2220,222000,0],
+    ["127","ヤクモマル",2230,223000,0],["88B","ヒグルミ",2240,581,1],["50","ニャンシー",2250,225000,0],["76","フェザーロ",2260,226000,0],
+    ["54","ライコーン",2270,227000,0],["63","シルフィア",2280,228000,0],["109","トドドドン",2290,229000,0],["5B","モモノスケ",2300,575,1],
+    ["126","コロマジロ",2310,231000,0],["58","ブルフェルノ",2320,232000,0],["103","オコチョ",2330,233000,0],["52","ニャンバット",2340,234000,0],
+    ["67","ビーナイト",2350,235000,0],["62","パチマル",2360,236000,0],["57","マスクロウ",2370,237000,0],["7B","エレカイト",2380,574,1],
+    ["133","ユキボウ",2390,239000,0],["92","カミナラシ",2400,240000,0],["37","ヘルメッコ",2410,241000,0],["100","ハグミー",2420,242000,0],
+    ["55B","シャーマンダー",2430,243000,1],["75","シーペント",2440,244000,0],["88","ガブルミ",2450,245000,0],["44B","ヨモギウサ",2460,246000,1],
+    ["43B","マグピス",2470,247000,0],["59","モコチッチ",2480,248000,0],["17B","デンタマ",2490,572,1],["29B","ユキツネ",2500,250000,1],
+    ["38B","オバケナワ",2510,251000,1],["47","リオリネ",2520,252000,0],["48","ヒメンダコ",2530,253000,0],["30B","ユメイカ",2540,571,1],
+    ["55","シャーキッド",2550,255000,0],["51","ホークウィン",2560,256000,0],["49","エアムルグ",2570,257000,0],["32B","ヤマガミ",2580,258000,1],
+    ["46","ユララン",2590,259000,0],["9","ブシガエル",2600,260000,0],["34","ベリゴート",2610,261000,0],["61","パピテフ",2620,262000,0],
+    ["10","モモンパ",2630,263000,0],["73B","チリザード",2640,264000,1],["45","クララン",2650,265000,0],["77","ポプリーナ",2660,266000,0],
+    ["73","ダリザード",2670,267000,0],["33","ガウルフ",2680,268000,0],["60","イバラヒメ",2690,269000,0],["25","ラヴィ",2700,270000,0],
+    ["32","ツノガミ",2710,271000,0],["20","メルパカ",2720,272000,0],["53","クルットリ",2730,273000,0],["7","ルミカイト",2740,274000,0],
+    ["27B","チルテト",2750,275000,1],["2","ツッパニャン",2760,276000,0],["30","ヤミイカ",2770,277000,0],["38","シメナワ",2780,278000,0],
+    ["31","モグルン",2790,279000,0],["40","ミルカルビ",2800,280000,0],["43","ケルピス",2810,281000,0],["39","メリポップ",2820,282000,0],
+    ["23B","カレッパ",2830,283000,1],["35","コモップ",2840,284000,0],["15B","コチグリ",2850,285000,1],["44","ヒメウサ",2860,286000,0],
+    ["26","ヒノコジカ",2870,287000,0],["28","イノボウ",2880,288000,0],["8","ミルフィー",2890,289000,0],["23","エテッパ",2900,290000,0],
+    ["22","ネムラム",2910,291000,0],["24","ルナティ",2920,292000,0],["13","ポチムネ",2930,293000,0],["19","ホウロック",2940,294000,0],
+    ["12","ナエモチ",2950,295000,0],["17","ペンタマ",2960,296000,0],["14","ポワワ",2970,297000,0],["5","カモノスケ",2980,298000,0],
+    ["29","キツネビ",2990,299000,0],["16","ンダコアラ",3000,300000,0],["42","ボルトラ",3010,301000,0],["4","クルリス",3020,302000,0],
+    ["15","パチグリ",3030,303000,0],["27","ニャオテト",3040,304000,0],["1","モコロン",3050,305000,0],["6","タマモ",3060,306000,0],
+    ["11","チョロゾウ",3070,307000,0],["3","タマコッコ",3080,308000,0],
+    ["-1","レッドスライム",3100,310000,1],["-1","かがやくスライム",3100,310000,1],["-1","あくまのめだま",3100,310000,1],["-1","グリーンスライム",3100,310000,1],
+    ["-1","かがやくコウモリ",3100,310000,1],["-1","どうくつコウモリ",3100,310000,1],["-1","クトゥルフのめだま",3100,310000,1],["-1","ブルースライム",3100,310000,1],
+    ["-1","パープルスライム",3100,310000,1],["-1","レインボースライム",3100,310000,1],["-1","まほうのつるぎ",3100,310000,1]
   ];
 
-  /* 特殊配合リスト [親A名, 親B名, 子供名] */
-  const RAW_DEFAULT_SPECIALS = [
-    ["フブキツネ", "カバネドリ", "シロカバネ"],
-    ["エレパンダ", "レヴィドラ", "ボルゼクス"],
-    ["ペコドン", "ライバード", "エレパンダ"],
-    ["フラリーナ", "ツキカゲ", "リリクイン"],
-    ["リリクイン", "ヤミトバリ", "ルナクイン"],
-    ["アヌビス", "カバネドリ", "ホルス"],
-    ["レヴィドラ", "ブルフェルノ", "アグニドラ"],
-    ["グレイシャル", "ヘルガルダ", "グレイシャドウ"],
-    ["ツノガミ", "ホウロック", "ヤマガミ"],
-    ["パチグリ", "ペンタマ", "コチグリ"],
-    ["ニャオテト", "ペンタマ", "チルテト"],
-    ["エテッパ", "キツネビ", "カレッパ"],
-    ["ペンタマ", "パチマル", "デンタマ"],
-    ["フェザーロ", "ヤミトバリ", "サンドロ"],
-    ["サラブレイズ", "ヤミトバリ", "サラブラック"],
-    ["シーペント", "ヤミトバリ", "スナペント"],
-    ["シャーキッド", "キツネビ", "シャーマンダー"],
-    ["ダリザード", "キツネビ", "チリザード"],
-    ["アルパオー", "ペンタマ", "アオパオー"],
-    ["ペコドン", "ミルカルビ", "パリピドン"],
-    ["グランモス", "ツララジカ", "ブリザモス"],
-    ["ボルカノン", "ペンタマ", "フロスカノン"],
-    ["スザク", "レヴィドラ", "シヴァ"],
-    ["ササゾー", "エレパンダ", "ライゾー"],
-    ["ラブラドン", "ケルピス", "スプラドン"],
-    ["ゴクエンオ", "ヤミトバリ", "シンエンオ"],
-    ["シルフィア", "ペンタマ", "シルティア"],
-    ["ゴリレイジ", "ドリタス", "ゴリガイア"],
-    ["アロアリュー", "ライバード", "ビリビリュー"],
-    ["オコチョ", "キツネビ", "モモチョ"],
-    ["イヌズマ", "ペンタマ", "フリーズマ"],
-    ["ガブルミ", "キツネビ", "ヒグルミ"]
+  /* [parentA, parentB, child] - 主要特殊配合リスト */
+  const RAW_SPECIALS = [
+    ["フブキツネ","カバネドリ","シロカバネ"],
+    ["エレパンダ","アグニドラ","ボルゼクス"],
+    ["ペコドン","エレパンダ","ボルゼクス"],
+    ["ササゾー","ライバード","エレパンダ"],
+    ["モスローン","フワフラワ","リリクイン"],
+    ["ササゾー","フラリーナ","リリクイン"],
+    ["リリクイン","デスティング","ルナクイン"],
+    ["アヌビス","フォレーナ","ホルス"],
+    ["アヌビス","カバネドリ","ホルス"],
+    ["ホルス","アヌビス","イシス"],
+    ["ホルス","シルフィア","セレスディア"],
+    ["グレイシャル","ヘルガルダ","グレイシャドウ"],
+    ["ボルカイザー","ボルゼクス","ボルドラゴ"],
+    ["レヴィドラ","イグニクス","アグニドラ"],
+    ["スザク","レヴィドラ","シヴァ"],
+    ["ボルカノン","ツンドラー","フロスカノン"],
+    ["グランモス","ツンドラー","ブリザモス"],
+    ["ラブラドン","シーペント","スプラドン"],
+    ["ペコドン","ライバード","パリピドン"],
+    ["ササゾー","エレパンダ","ライゾー"],
+    ["ヘルゴート","ツキカゲ","アビスゴート"],
+    ["ツキカゲ","フブキツネ","ユキカゲ"],
+    ["ゴクエンオ","ツジギリ","シンエンオ"],
+    ["パチグリ","ペンタマ","コチグリ"],
+    ["シーペント","ドリタス","スナペント"],
+    ["ダリザード","キツネビ","チリザード"],
+    ["エテッパ","キツネビ","カレッパ"],
+    ["サラブレイズ","ヤミトバリ","サラブラック"],
+    ["ツジギリ","ヘルゴート","ヤミウチ"],
+    ["シャーキッド","キツネビ","シャーマンダー"],
+    ["ツノガミ","ガウルフ","ヤマガミ"],
+    ["アルパオー","ペンタマ","アオパオー"],
+    ["ハグミー","ヤミイカ","ハグユー"],
+    ["ニャオテト","ペンタマ","チルテト"],
+    ["キツネビ","ペンタマ","ユキツネ"],
+    ["デスティング","ゴクエンオ","ゴルディング"],
+    ["オオタチウオ","キツネビ","ヒノタチウオ"],
+    ["イヌズマ","フブキツネ","フリーズマ"],
+    ["ゴリレイジ","ドリタス","ゴリガイア"],
+    ["アロアリュー","ライバード","ビリビリュー"],
+    ["カミナラシ","ヤミトバリ","ヤミナラシ"],
+    ["オコチョ","キツネビ","モモチョ"],
+    ["メリポップ","ペンタマ","メリコロネ"],
+    ["フェザーロ","ドリタス","サンドロ"],
+    ["シメナワ","ヤミイカ","オバケナワ"],
+    ["クレメーオ","ヤミトバリ","クレメーナ"],
+    ["シルフィア","ペンタマ","シルティア"],
+    ["ペンタマ","パチマル","デンタマ"],
+    ["ケルピス","キツネビ","マグピス"],
+    ["ガブルミ","キツネビ","ヒグルミ"],
+    ["シラヌイ","ツジギリ","カゲヌイ"],
+    ["ヘルガルダ","ライバード","ライガルダ"],
+    ["ムラクモ","ヤミトバリ","ムラサメ"],
+    ["トドドドン","ボルカイザー","ゴルドドン"]
   ];
 
-  /* パッシブスキル一覧 [name, rank('rainbow'|'gold'|'white'), desc] */
-  const RAW_DEFAULT_SKILLS = [
-    ["鬼神", "rainbow", "攻撃+30% / 防御+5%"],
-    ["伝説", "rainbow", "攻撃+20% / 防御+20% / 移動速度+15%"],
-    ["超絶技巧", "rainbow", "作業速度+75%"],
-    ["神速", "rainbow", "移動速度+30%"],
-    ["吸血鬼", "rainbow", "ダメージの一部をHP吸収 / 夜行性"],
-    ["ダイヤモンドボディ", "rainbow", "防御+30%"],
-    ["永炎", "rainbow", "炎・雷属性の攻撃ダメージ+30%"],
-    ["セイレーンの祝福", "rainbow", "闇・氷属性の攻撃ダメージ+30%"],
-    ["無尽蔵", "rainbow", "最大スタミナ+75%"],
-    ["職人気質", "gold", "作業速度+50%"],
-    ["獰猛", "gold", "攻撃+20%"],
-    ["脳筋", "gold", "攻撃+30% / 作業速度-50%"],
-    ["希少", "gold", "作業速度+15% / 攻撃+15%"],
-    ["社畜", "gold", "作業速度+30% / 攻撃-30%"],
-    ["真面目", "gold", "作業速度+20%"],
-    ["ワークホリック", "gold", "SAN値減少速度-15%"],
-    ["走るのが得意", "gold", "移動速度+20%"],
-    ["屈強な肉体", "gold", "防御+20%"],
-    ["突撃指揮者", "gold", "プレイヤーの攻撃+10%"],
-    ["堅城の軍師", "gold", "プレイヤーの防御+10%"],
-    ["冥王", "gold", "闇属性の攻撃ダメージ+20%"],
-    ["炎帝", "gold", "炎属性の攻撃ダメージ+20%"],
-    ["氷帝", "gold", "氷属性の攻撃ダメージ+20%"],
-    ["雷帝", "gold", "雷属性の攻撃ダメージ+20%"],
-    ["岩帝", "gold", "地属性の攻撃ダメージ+20%"],
-    ["海皇", "gold", "水属性の攻撃ダメージ+20%"],
-    ["精霊王", "gold", "草属性の攻撃ダメージ+20%"],
-    ["聖天", "gold", "無属性の攻撃ダメージ+20%"],
-    ["神龍", "gold", "竜属性の攻撃ダメージ+20%"],
-    ["夜行性", "gold", "夜でも眠らず作業する"],
-    ["博愛主義", "gold", "配合タマゴ生産速度+100%"],
-    ["勇敢", "white", "攻撃+10%"],
-    ["頑丈", "white", "防御+10%"],
-    ["すばしっこい", "white", "移動速度+10%"],
-    ["ダイエットマスター", "white", "満腹度減少速度-15%"],
-    ["ポジティブ思考", "white", "SAN値減少速度-10%"]
+  /* [name, tier('rainbow'|'gold'|'white'|'red'), category, desc] - 最新OP.GG v1.0準拠 全123種 */
+  const RAW_SKILLS = [
+    // 🌈 虹枠 (31)
+    ["次元跳躍","rainbow","世界樹","移動速度+50% / 満腹度減少+15% / 世界樹の木・岩に近づいても消滅しない"],
+    ["諸刃の聖剣","rainbow","世界樹","攻撃+50% / 防御-30% / 世界樹の木・岩に近づいても消滅しない"],
+    ["破壊神","rainbow","世界樹","攻撃+40% / 防御+20% / 最大HP-50% / 世界樹の木・岩に近づいても消滅しない"],
+    ["聖域の肉壁","rainbow","世界樹","防御+50% / 攻撃-30% / 世界樹の木・岩に近づいても消滅しない"],
+    ["悪魔の手","rainbow","世界樹","作業速度+90% / SAN値減少+15% / 世界樹の木・岩に近づいても消滅しない"],
+    ["仙人","rainbow","世界樹","SAN値減りにくい+50% / 作業速度-20% / 世界樹の木・岩に近づいても消滅しない"],
+    ["神樹の苗床","rainbow","世界樹","満腹度減りにくい+50% / HP-20% / 世界樹の木・岩に近づいても消滅しない"],
+    ["伝説","rainbow","伝説","攻撃+20% / 防御+20% / 移動速度+20%"],
+    ["神速","rainbow","パル","移動速度+30%"],
+    ["波乗り王","rainbow","パル","水上の移動速度+50%"],
+    ["不死身","rainbow","変異","与ダメ5%吸収HP回復 / パルのHP自然回復量+100% / 攻撃+15%"],
+    ["鬼神","rainbow","パル","攻撃+30% / 防御+5%"],
+    ["希少","rainbow","伝説","攻撃+15% / 防御+15% / 作業速度+20%"],
+    ["ダイヤモンドボディ","rainbow","パル","防御+30% / ひるみ無効 / 吹き飛び無効"],
+    ["重装甲","rainbow","変異","爆破ダメージ無効"],
+    ["特異体質","rainbow","変異","パル＆プレイヤーHP自然回復+50% / 防御+25% / 毒・炎上無効"],
+    ["ヌシ","rainbow","パル","水攻撃+20% / 氷攻撃+20% / 防御+20%"],
+    ["吸血鬼","rainbow","パル","与ダメ5%吸収HP回復 / 夜になっても眠らず働き続ける"],
+    ["永久機関","rainbow","パル","最大スタミナ+75%（※ライド可能なパルのみ有効）"],
+    ["超絶技巧","rainbow","パル","作業速度+75%"],
+    ["不動明王の心","rainbow","パル","SAN値が減りにくい+20%"],
+    ["永炎","rainbow","パル","炎攻撃+30% / 雷攻撃+30%"],
+    ["侵略者","rainbow","パル","闇攻撃+30% / 竜攻撃+30%"],
+    ["救世主","rainbow","パル","無攻撃+30% / 草攻撃+30%"],
+    ["魔女","rainbow","パル","闇攻撃+30% / 氷攻撃+30%"],
+    ["ベビーシッター","rainbow","変異","拠点にいる間、配合牧場のタマゴ生成速度+30%・孵化速度+30%"],
+    ["大盤振る舞い","rainbow","パル","このパルのドロップアイテム+100%"],
+    ["牧場の主","rainbow","パル","牧場の作業適性+2"],
+    ["絶食の極み","rainbow","パル","満腹度が減りにくい+20%"],
+    ["軽身","rainbow","パル","ライド中のジャンプ回数+1"],
+    ["空渡り","rainbow","変異","ライド中のジャンプ回数+2"],
+
+    // 🟡 金枠 (29)
+    ["走るのが得意","gold","パル","移動速度+20%"],
+    ["泳ぐのが得意","gold","パル","水上の移動速度+40%"],
+    ["冷静沈着","gold","パル","アクティブスキルCT短縮30% / 攻撃+10%"],
+    ["獰猛","gold","パル","攻撃+20%"],
+    ["突撃指揮者","gold","パル","プレイヤーの攻撃+10%"],
+    ["屈強な肉体","gold","パル","防御+20% / ひるみ無効"],
+    ["大物","gold","パル","水攻撃+5% / 氷攻撃+5% / 防御+5%"],
+    ["堅城の軍師","gold","パル","プレイヤーの防御+10%"],
+    ["ヒーリングコーチ","gold","パル","プレイヤーのHP自然回復量+5%"],
+    ["バテ防止係","gold","パル","プレイヤーのスタミナ消費量軽減+5%"],
+    ["無限のスタミナ","gold","パル","最大スタミナ+50%（※ライド可能なパルのみ有効）"],
+    ["職人気質","gold","パル","作業速度+50%"],
+    ["伐採リーダー","gold","パル","プレイヤーの伐採効率+25%"],
+    ["鉱山のチーフ","gold","パル","プレイヤーの採掘効率+25%"],
+    ["モチベーター","gold","パル","プレイヤーの作業速度+25%"],
+    ["ワーカーホリック","gold","パル","SAN値が減りにくい+15%"],
+    ["海皇","gold","パル","水属性攻撃ダメージ+30%"],
+    ["冥王","gold","パル","闇属性攻撃ダメージ+30%"],
+    ["神龍","gold","パル","竜属性攻撃ダメージ+30%"],
+    ["地帝","gold","パル","地属性攻撃ダメージ+30%"],
+    ["炎帝","gold","パル","炎属性攻撃ダメージ+30%"],
+    ["氷帝","gold","パル","氷属性攻撃ダメージ+30%"],
+    ["精霊王","gold","パル","草属性攻撃ダメージ+30%"],
+    ["聖天","gold","パル","無属性攻撃ダメージ+30%"],
+    ["雷帝","gold","パル","雷属性攻撃ダメージ+30%"],
+    ["高貴","gold","パル","取引価格が改善+5%"],
+    ["サービス精神","gold","パル","このパルのドロップアイテム+50%"],
+    ["博愛主義者","gold","パル","配合牧場にアサイン時、タマゴ生成速度+100%"],
+    ["牧場っ子","gold","パル","牧場の作業適性+1"],
+
+    // ⚪ 白枠 (43)
+    ["脳筋","white","パル","攻撃+30% / 作業速度-50%"],
+    ["勇敢","white","パル","攻撃+10%"],
+    ["堅牢","white","パル","防御+15%"],
+    ["まじめ","white","パル","作業速度+20%"],
+    ["すばしっこい","white","パル","移動速度+10%"],
+    ["夜行性","white","パル","夜になっても眠らず働き続ける"],
+    ["社畜","white","パル","作業速度+30% / 攻撃-30%"],
+    ["うぬぼれ屋","white","パル","作業速度+10% / 防御-10%"],
+    ["サディスト","white","パル","攻撃+15% / 防御-15%"],
+    ["マゾヒスト","white","パル","防御+15% / 攻撃-15%"],
+    ["血気盛ん","white","パル","攻撃+15% / 移動速度+5%"],
+    ["職人の卵","white","パル","作業速度+15%"],
+    ["積極的","white","パル","攻撃+10% / 防御-10%"],
+    ["小食","white","パル","満腹度が減りにくい+10%"],
+    ["ダイエットマスター","white","パル","満腹度が減りにくい+15%"],
+    ["俊足","white","パル","移動速度+15%"],
+    ["硬い皮膚","white","パル","防御+10%"],
+    ["ポジティブ思考","white","パル","SAN値が減りにくい+10%"],
+    ["粗暴","white","パル","攻撃+15% / 作業速度-10%"],
+    ["せっかち","white","パル","アクティブスキルCT短縮10%"],
+    ["商才","white","パル","取引価格が改善+3%"],
+    ["慈悲深き心","white","パル","攻撃しても敵のHPを1残す"],
+    ["健脚","white","パル","移動速度+10% / スタミナ+10%"],
+    ["スタミナ自慢","white","パル","最大スタミナ+25%"],
+    ["泳ぎが得意","white","パル","水上の移動速度+10%"],
+    ["火遊び好き","white","パル","炎属性攻撃ダメージ+10%"],
+    ["草木の香り","white","パル","草属性攻撃ダメージ+10%"],
+    ["水遊び好き","white","パル","水属性攻撃ダメージ+10%"],
+    ["コンデンサー","white","パル","雷属性攻撃ダメージ+10%"],
+    ["冷血","white","パル","氷属性攻撃ダメージ+10%"],
+    ["大地の力","white","パル","地属性攻撃ダメージ+10%"],
+    ["夜の帳","white","パル","闇属性攻撃ダメージ+10%"],
+    ["竜の血族","white","パル","竜属性攻撃ダメージ+10%"],
+    ["禅の心","white","パル","無属性攻撃ダメージ+10%"],
+    ["日焼け止め","white","パル","炎属性ダメージ軽減+10%"],
+    ["除草効果","white","パル","草属性ダメージ軽減+10%"],
+    ["防水加工","white","パル","水属性ダメージ軽減+10%"],
+    ["絶縁体","white","パル","雷属性ダメージ軽減+10%"],
+    ["高温体質","white","パル","氷属性ダメージ軽減+10%"],
+    ["耐震構造","white","パル","地属性ダメージ軽減+10%"],
+    ["陽気","white","パル","闇属性ダメージ軽減+10%"],
+    ["竜殺し","white","パル","竜属性ダメージ軽減+10%"],
+    ["異常なし","white","パル","無属性ダメージ軽減+10%"],
+
+    // 🔴 赤枠 (20)
+    ["臆病","red","パル","攻撃-10%"],
+    ["弱気","red","パル","攻撃-20%"],
+    ["不器用","red","パル","作業速度-10%"],
+    ["へなちょこ","red","パル","攻撃-10% / 防御-10%"],
+    ["脆弱","red","パル","防御-15%"],
+    ["もろい体","red","パル","防御-10%"],
+    ["軟弱","red","パル","防御-20%"],
+    ["サボり癖","red","パル","作業速度-20%"],
+    ["サボり魔","red","パル","作業速度-30%"],
+    ["情緒不安定","red","パル","SAN値が減りやすい+10%"],
+    ["破滅願望","red","パル","SAN値が減りやすい+15%"],
+    ["病弱","red","パル","防御-20% / SAN値が減りやすい+10%"],
+    ["食いしん坊","red","パル","満腹度が減りやすい+10%"],
+    ["底なしの胃袋","red","パル","満腹度が減りやすい+15%"],
+    ["おっちょこちょい","red","パル","作業速度-10% / 攻撃-10%"],
+    ["無気力","red","パル","攻撃-15%"],
+    ["鈍足","red","パル","移動速度-10%"],
+    ["のろま","red","パル","移動速度-20%"],
+    ["卑屈","red","パル","攻撃-15% / 防御-10%"],
+    ["平和主義者","red","パル","攻撃-20%"]
   ];
+
+  const TIER_ORDER = { rainbow: 4, gold: 3, white: 2, red: 1 };
 
   function createDefaultDB() {
-    const pals = RAW_DEFAULT_PALS.map((row, idx) => ({
+    const pals = RAW_PALS.map((t, idx) => ({
       id: idx + 1,
-      dexNo: String(row[0]),
-      name: row[1],
-      power: row[2],
-      indexOrder: row[3],
-      isSpecialOnly: Boolean(row[4])
+      dexNo: String(t[0]),
+      name: String(t[1]),
+      power: Number(t[2]),
+      priority: Number(t[3]),
+      isSpecialOnly: t[4] === 1
     }));
-    const palByName = new Map(pals.map(p => [p.name, p.id]));
+
+    const palIdByName = new Map(pals.map(p => [p.name, p.id]));
     const specials = [];
-    RAW_DEFAULT_SPECIALS.forEach((row, idx) => {
-      const a = palByName.get(row[0]);
-      const b = palByName.get(row[1]);
-      const c = palByName.get(row[2]);
+    const seenPairs = new Set();
+    RAW_SPECIALS.forEach(t => {
+      const a = palIdByName.get(t[0]);
+      const b = palIdByName.get(t[1]);
+      const c = palIdByName.get(t[2]);
       if (a && b && c) {
-        specials.push({ id: idx + 1, parentA: a, parentB: b, child: c });
+        const key = Math.min(a, b) + "_" + Math.max(a, b);
+        if (!seenPairs.has(key)) {
+          seenPairs.add(key);
+          specials.push({ id: specials.length + 1, parentA: a, parentB: b, child: c });
+        }
       }
     });
-    const skills = RAW_DEFAULT_SKILLS.map((row, idx) => ({
+
+    const skills = RAW_SKILLS.map((t, idx) => ({
       id: idx + 1,
-      name: row[0],
-      rank: row[1],
-      desc: row[2]
+      name: String(t[0]),
+      tier: String(t[1]),
+      category: String(t[2] || "パル"),
+      desc: String(t[3] || "")
     }));
+
     return { pals, specials, skills };
   }
 
-  /* --------------------------------------------------------------------------
-   * 2. アプリケーション状態 & localStorage / sessionStorage 管理
-   * -------------------------------------------------------------------------- */
-  let db = loadDB();
-  let ownedParents = loadOwned();
-  let savedRoutes = loadSavedRoutes();
-  let isAdmin = sessionStorage.getItem(SESSION_KEY_ADMIN) === "1";
+  /* ==========================================================================
+   * 2. 状態管理 & localStorage（v7 + v6/v5/v4 からの安全移行）
+   * ========================================================================== */
+  let db = createDefaultDB();
+  let ownedParents = [];
+  let savedRoutes = [];
+  let isAdminMode = false;
 
-  let palIndexById = new Map();
+  // 高速ルックアップ
   let palById = new Map();
+  let palIdxById = new Map();
   let skillById = new Map();
   let specialMap = new Map();
   let breedTable = null;
-  let isSpecialPairTable = null;
+  let specialPairTable = null;
 
+  // UI状態
   let goalPalId = null;
   let goalSkillIds = [];
   let draftOwnedPalId = null;
@@ -1614,45 +1724,127 @@ tr:hover td {
   let reverseTargetId = null;
 
   let lastSearchResults = [];
-  let lastSearchMeta = { targetSkillIds: [], useOwnedFlagMode: false };
   let activeRouteIndex = 0;
+  let activeTargetSkillIds = [];
+  let activeUseOwnedFlagMode = false;
+  let activeSavedRouteId = null;
+  let activeCheckedSteps = {};
 
-  function loadDB() {
+  function normalizeTier(rawTier, rawRank) {
+    const val = rawTier || rawRank;
+    if (val === "rainbow" || val === "gold" || val === "white" || val === "red") return val;
+    if (val === 4) return "rainbow";
+    if (val === 3) return "gold";
+    if (val === 1) return "red";
+    return "white";
+  }
+
+  function safeReadJson(key) {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY_DATA);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed.pals) && Array.isArray(parsed.specials) && Array.isArray(parsed.skills)) {
-          return parsed;
-        }
-      }
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      return JSON.parse(raw);
     } catch (e) {
-      console.error("Failed to load DB from localStorage:", e);
+      return null;
     }
-    return createDefaultDB();
+  }
+
+  function loadInitialState() {
+    const freshDefault = createDefaultDB();
+
+    // 1) DBの読み込み：v7_dataがあれば管理者編集分を尊重しつつ最新の298パル・123スキルを常に補完
+    const savedDb = safeReadJson(STORAGE_KEY_DATA);
+    if (savedDb && Array.isArray(savedDb.pals) && Array.isArray(savedDb.specials) && Array.isArray(savedDb.skills)) {
+      const palMap = new Map(savedDb.pals.map(p => [p.name, p]));
+      let nextPalId = savedDb.pals.reduce((m, x) => Math.max(m, Number(x.id) || 0), 0) + 1;
+      freshDefault.pals.forEach(defP => {
+        if (!palMap.has(defP.name)) {
+          const added = Object.assign({}, defP, { id: nextPalId++ });
+          savedDb.pals.push(added);
+          palMap.set(added.name, added);
+        }
+      });
+
+      const normSkills = savedDb.skills.map((s, i) => ({
+        id: Number(s.id) || (i + 1),
+        name: String(s.name || "").trim(),
+        tier: normalizeTier(s.tier, s.rank),
+        category: String(s.category || "パル"),
+        desc: String(s.desc || s.effect || "").trim()
+      }));
+      const skillMap = new Map(normSkills.map(s => [s.name, s]));
+      let nextSkillId = normSkills.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+      freshDefault.skills.forEach(defS => {
+        const existing = skillMap.get(defS.name);
+        if (existing) {
+          existing.tier = defS.tier;
+          existing.category = defS.category;
+          existing.desc = defS.desc;
+        } else {
+          const added = Object.assign({}, defS, { id: nextSkillId++ });
+          normSkills.push(added);
+          skillMap.set(added.name, added);
+        }
+      });
+      savedDb.skills = normSkills;
+      db = savedDb;
+    } else {
+      db = freshDefault;
+    }
+
+    // 2) 手持ち親パルの読み込み（v7 -> v6 -> v5 -> v4 の順に自動移行）
+    const ownedCandidate =
+      safeReadJson(STORAGE_KEY_OWNED) ||
+      safeReadJson("palworld_planner_v6") ||
+      safeReadJson("palworld_planner_v5") ||
+      safeReadJson("palworld_planner_v4");
+
+    if (Array.isArray(ownedCandidate)) {
+      const validPalIds = new Set(db.pals.map(p => p.id));
+      const validSkillIds = new Set(db.skills.map(s => s.id));
+      ownedParents = ownedCandidate
+        .filter(item => item && validPalIds.has(Number(item.palId)))
+        .map((item, idx) => ({
+          uid: Number(item.uid) || (Date.now() + idx),
+          palId: Number(item.palId),
+          skillIds: Array.isArray(item.skillIds)
+            ? item.skillIds.map(Number).filter(sid => validSkillIds.has(sid)).slice(0, 4)
+            : []
+        }));
+    } else {
+      ownedParents = [];
+    }
+
+    // 3) 保存済みルートの読み込み（v7 -> v6 -> v5 の順に自動移行）
+    const routesCandidate =
+      safeReadJson(STORAGE_KEY_ROUTES) ||
+      safeReadJson("palworld_planner_v6_routes") ||
+      safeReadJson("palworld_planner_v5_routes");
+
+    if (Array.isArray(routesCandidate)) {
+      savedRoutes = routesCandidate.filter(r => r && r.routeData && r.name);
+    } else {
+      savedRoutes = [];
+    }
+
+    // v7へ安全保存
+    try {
+      localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(db));
+      localStorage.setItem(STORAGE_KEY_OWNED, JSON.stringify(ownedParents));
+      localStorage.setItem(STORAGE_KEY_ROUTES, JSON.stringify(savedRoutes));
+    } catch (e) {
+      // プライベートブラウジング等の制限時はメモリのみで継続動作
+    }
   }
 
   function saveDB() {
     try {
       localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(db));
     } catch (e) {
-      showToast("データの保存に失敗しました（容量超過等）", "error");
+      showToast("データの保存に失敗しました", "error");
     }
-    rebuildBreedingEngine();
+    rebuildEngine();
     updateHeaderStats();
-  }
-
-  function loadOwned() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY_OWNED);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {
-      console.error("Failed to load owned parents:", e);
-    }
-    return [];
   }
 
   function saveOwned() {
@@ -1664,69 +1856,58 @@ tr:hover td {
     renderOwnedList();
   }
 
-  function loadSavedRoutes() {
+  function saveSavedRoutes() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY_SAVED_ROUTES);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
-      }
+      localStorage.setItem(STORAGE_KEY_ROUTES, JSON.stringify(savedRoutes));
     } catch (e) {
-      console.error("Failed to load saved routes:", e);
+      showToast("ルートの保存に失敗しました", "error");
     }
-    return [];
+    updateSavedRoutesBadge();
   }
 
-  function persistSavedRoutes() {
-    try {
-      localStorage.setItem(STORAGE_KEY_SAVED_ROUTES, JSON.stringify(savedRoutes));
-    } catch (e) {
-      showToast("ルートの保存に失敗しました（容量超過等）", "error");
-    }
-    updateSavedRoutesCountBtn();
+  function updateSavedRoutesBadge() {
+    const el = document.getElementById("savedRoutesBadge");
+    if (el) el.textContent = String(savedRoutes.length);
   }
 
-  function updateSavedRoutesCountBtn() {
-    const btn = document.getElementById("btnOpenSavedRoutes");
-    if (btn) {
-      btn.textContent = `📂 保存済みルート (${savedRoutes.length})`;
-    }
-  }
-
-  /* --------------------------------------------------------------------------
-   * 3. 配合計算エンジン（事前計算テーブル O(1) ルックアップ）
-   * -------------------------------------------------------------------------- */
-  function rebuildBreedingEngine() {
+  /* ==========================================================================
+   * 3. 配合計算エンジン（OP.GG準拠・事前計算テーブル O(1)）
+   * ========================================================================== */
+  function rebuildEngine() {
     palById.clear();
-    palIndexById.clear();
+    palIdxById.clear();
     skillById.clear();
     specialMap.clear();
 
     db.pals.forEach((p, idx) => {
       palById.set(p.id, p);
-      palIndexById.set(p.id, idx);
+      palIdxById.set(p.id, idx);
     });
     db.skills.forEach(s => skillById.set(s.id, s));
 
     db.specials.forEach(sp => {
       const a = Math.min(sp.parentA, sp.parentB);
       const b = Math.max(sp.parentA, sp.parentB);
-      specialMap.set(`${a}_${b}`, sp.child);
+      specialMap.set(a + "_" + b, sp.child);
     });
 
     const N = db.pals.length;
     breedTable = new Int32Array(N * N);
-    isSpecialPairTable = new Uint8Array(N * N);
+    specialPairTable = new Uint8Array(N * N);
 
-    const normalCandidates = db.pals
-      .map((p, idx) => ({ idx, power: p.power, order: p.indexOrder, isSpecialOnly: p.isSpecialOnly }))
-      .filter(p => !p.isSpecialOnly);
+    const normalCandidates = [];
+    for (let idx = 0; idx < N; idx++) {
+      const p = db.pals[idx];
+      if (!p.isSpecialOnly) {
+        normalCandidates.push({ idx, power: p.power, priority: p.priority });
+      }
+    }
 
     for (let i = 0; i < N; i++) {
       const pA = db.pals[i];
       for (let j = i; j < N; j++) {
         const pB = db.pals[j];
-        let childIdx = -1;
+        let childIdx = 0;
         let specialFlag = 0;
 
         if (i === j) {
@@ -1734,21 +1915,22 @@ tr:hover td {
         } else {
           const minId = Math.min(pA.id, pB.id);
           const maxId = Math.max(pA.id, pB.id);
-          const spChildId = specialMap.get(`${minId}_${maxId}`);
-          if (spChildId !== undefined && palIndexById.has(spChildId)) {
-            childIdx = palIndexById.get(spChildId);
+          const spChildId = specialMap.get(minId + "_" + maxId);
+          if (spChildId !== undefined && palIdxById.has(spChildId)) {
+            childIdx = palIdxById.get(spChildId);
             specialFlag = 1;
           } else {
             const targetPower = Math.floor((pA.power + pB.power + 1) / 2);
             let bestIdx = normalCandidates.length > 0 ? normalCandidates[0].idx : 0;
             let bestDiff = Infinity;
-            let bestOrder = -Infinity;
+            let bestPriority = -Infinity;
+
             for (let k = 0; k < normalCandidates.length; k++) {
               const cand = normalCandidates[k];
               const diff = Math.abs(cand.power - targetPower);
-              if (diff < bestDiff || (diff === bestDiff && cand.order > bestOrder)) {
+              if (diff < bestDiff || (diff === bestDiff && cand.priority > bestPriority)) {
                 bestDiff = diff;
-                bestOrder = cand.order;
+                bestPriority = cand.priority;
                 bestIdx = cand.idx;
               }
             }
@@ -1758,19 +1940,19 @@ tr:hover td {
 
         breedTable[i * N + j] = childIdx;
         breedTable[j * N + i] = childIdx;
-        isSpecialPairTable[i * N + j] = specialFlag;
-        isSpecialPairTable[j * N + i] = specialFlag;
+        specialPairTable[i * N + j] = specialFlag;
+        specialPairTable[j * N + i] = specialFlag;
       }
     }
   }
 
   function getBreedingResultByIds(idA, idB) {
-    const idxA = palIndexById.get(idA);
-    const idxB = palIndexById.get(idB);
+    const idxA = palIdxById.get(idA);
+    const idxB = palIdxById.get(idB);
     if (idxA === undefined || idxB === undefined) return null;
     const N = db.pals.length;
     const childIdx = breedTable[idxA * N + idxB];
-    const isSpecial = isSpecialPairTable[idxA * N + idxB] === 1;
+    const isSpecial = specialPairTable[idxA * N + idxB] === 1;
     const pA = db.pals[idxA];
     const pB = db.pals[idxB];
     const child = db.pals[childIdx];
@@ -1778,13 +1960,13 @@ tr:hover td {
     return { child, isSpecial, avg, sameSpecies: idxA === idxB };
   }
 
-  /* --------------------------------------------------------------------------
-   * 4. 複数親・最短合流ルート探索エンジン
-   * -------------------------------------------------------------------------- */
+  /* ==========================================================================
+   * 4. 複数親・最短合流ルート探索エンジン（ハイパーグラフDP探索）
+   * ========================================================================== */
   function findShortestMergeRoutes(targetPalId, targetSkillIds, ownedList, allowWild, excludeSpecialWild, maxSteps) {
     const t0 = performance.now();
     const N = db.pals.length;
-    const targetPalIdx = palIndexById.get(targetPalId);
+    const targetPalIdx = palIdxById.get(targetPalId);
     if (targetPalIdx === undefined) {
       return { routes: [], elapsed: 0, error: "目的のパルが見つかりません。" };
     }
@@ -1804,18 +1986,21 @@ tr:hover td {
     const ownedSigSeen = new Set();
 
     ownedList.forEach(item => {
-      const pIdx = palIndexById.get(item.palId);
+      const pIdx = palIdxById.get(item.palId);
       if (pIdx === undefined) return;
       let mask = 0;
       if (useOwnedFlagMode) {
         mask = 1;
       } else {
         targetSkillIds.forEach((sid, bit) => {
-          if (item.skillIds.includes(sid)) mask |= (1 << bit);
+          if (Array.isArray(item.skillIds) && item.skillIds.includes(sid)) {
+            mask |= (1 << bit);
+          }
         });
       }
+
       const state = pIdx * numMasks + mask;
-      const sig = `O:${pIdx}:${mask}`;
+      const sig = "O:" + pIdx + ":" + mask;
       if (ownedSigSeen.has(sig)) return;
       ownedSigSeen.add(sig);
 
@@ -1825,7 +2010,6 @@ tr:hover td {
         steps: 0,
         wildCount: 0,
         type: "owned",
-        ownedRef: item,
         left: null,
         right: null,
         isSpecial: false,
@@ -1842,8 +2026,12 @@ tr:hover td {
       }
     });
 
-    if (ownedList.length === 0 && !useOwnedFlagMode && targetSkillIds.length > 0) {
-      return { routes: [], elapsed: performance.now() - t0, error: "スキルを継承するには、手持ちの親パルを1体以上登録してください。" };
+    if (ownedList.length === 0) {
+      return {
+        routes: [],
+        elapsed: performance.now() - t0,
+        error: "手持ちの親パルを1体以上登録してください。"
+      };
     }
 
     if (!useOwnedFlagMode) {
@@ -1852,21 +2040,22 @@ tr:hover td {
       if (unionMask !== goalMask) {
         const missing = targetSkillIds
           .filter((sid, bit) => (unionMask & (1 << bit)) === 0)
-          .map(sid => skillById.get(sid)?.name || "不明");
+          .map(sid => {
+            const sk = skillById.get(sid);
+            return sk ? sk.name : "不明";
+          });
         return {
           routes: [],
           elapsed: performance.now() - t0,
-          error: `手持ちの親パルに目的のスキルが不足しています（不足: ${missing.join("、")}）。`
+          error: "手持ちの親パルに目的のスキルが不足しています（不足: " + missing.join("、") + "）。"
         };
       }
-    } else if (ownedList.length === 0) {
-      return { routes: [], elapsed: performance.now() - t0, error: "手持ちの親パルを1体以上登録してください。" };
     }
 
     if (allowWild) {
       for (let pIdx = 0; pIdx < N; pIdx++) {
         if (excludeSpecialWild && db.pals[pIdx].isSpecialOnly) continue;
-        const state = pIdx * numMasks + 0;
+        const state = pIdx * numMasks;
         if (bestScore[state] <= 0) continue;
         bestScore[state] = 0.01;
         layers[0].push({
@@ -1875,11 +2064,10 @@ tr:hover td {
           steps: 0,
           wildCount: 1,
           type: "wild",
-          ownedRef: null,
           left: null,
           right: null,
           isSpecial: false,
-          sig: `W:${pIdx}`
+          sig: "W:" + pIdx
         });
       }
     }
@@ -1920,7 +2108,9 @@ tr:hover td {
             const isGoal = (childIdx === targetPalIdx && newMask === goalMask);
 
             if (isGoal) {
-              const sig = A.sig < B.sig ? `(${A.sig}+${B.sig})>${childIdx}` : `(${B.sig}+${A.sig})>${childIdx}`;
+              const sig = A.sig < B.sig
+                ? "(" + A.sig + "+" + B.sig + ")>" + childIdx
+                : "(" + B.sig + "+" + A.sig + ")>" + childIdx;
               if (!goalSigSet.has(sig)) {
                 goalSigSet.add(sig);
                 goalCandidates.push({
@@ -1929,10 +2119,9 @@ tr:hover td {
                   steps: k,
                   wildCount: newWild,
                   type: "bred",
-                  ownedRef: null,
                   left: A,
                   right: B,
-                  isSpecial: isSpecialPairTable[A.palIdx * N + B.palIdx] === 1,
+                  isSpecial: specialPairTable[A.palIdx * N + B.palIdx] === 1,
                   sig
                 });
                 if (k < minFoundStep) minFoundStep = k;
@@ -1942,17 +2131,18 @@ tr:hover td {
 
             if (newScore < bestScore[state]) {
               bestScore[state] = newScore;
-              const sig = A.sig < B.sig ? `(${A.sig}+${B.sig})>${childIdx}` : `(${B.sig}+${A.sig})>${childIdx}`;
+              const sig = A.sig < B.sig
+                ? "(" + A.sig + "+" + B.sig + ")>" + childIdx
+                : "(" + B.sig + "+" + A.sig + ")>" + childIdx;
               currentLayer.push({
                 palIdx: childIdx,
                 mask: newMask,
                 steps: k,
                 wildCount: newWild,
                 type: "bred",
-                ownedRef: null,
                 left: A,
                 right: B,
-                isSpecial: isSpecialPairTable[A.palIdx * N + B.palIdx] === 1,
+                isSpecial: specialPairTable[A.palIdx * N + B.palIdx] === 1,
                 sig
               });
             }
@@ -1988,250 +2178,11 @@ tr:hover td {
     };
   }
 
-  /* --------------------------------------------------------------------------
-   * 5. ルート保存・復元（シリアライズ / デシリアライズ）
-   * -------------------------------------------------------------------------- */
-  function serializeRouteNode(node) {
-    if (!node) return null;
-    const pal = db.pals[node.palIdx];
-    return {
-      palId: pal ? pal.id : null,
-      palName: pal ? pal.name : "不明",
-      mask: node.mask,
-      steps: node.steps,
-      wildCount: node.wildCount,
-      type: node.type,
-      isSpecial: Boolean(node.isSpecial),
-      left: node.left ? serializeRouteNode(node.left) : null,
-      right: node.right ? serializeRouteNode(node.right) : null
-    };
-  }
-
-  function deserializeRouteNode(sNode) {
-    if (!sNode) return null;
-    let pIdx = palIndexById.get(sNode.palId);
-    if (pIdx === undefined && sNode.palName) {
-      pIdx = db.pals.findIndex(p => p.name === sNode.palName);
-    }
-    if (pIdx === undefined || pIdx < 0) return null;
-
-    const left = sNode.left ? deserializeRouteNode(sNode.left) : null;
-    const right = sNode.right ? deserializeRouteNode(sNode.right) : null;
-    if (sNode.type === "bred" && (!left || !right)) return null;
-
-    return {
-      palIdx: pIdx,
-      mask: sNode.mask,
-      steps: sNode.steps,
-      wildCount: sNode.wildCount,
-      type: sNode.type,
-      ownedRef: null,
-      left,
-      right,
-      isSpecial: Boolean(sNode.isSpecial)
-    };
-  }
-
-  function openSaveCurrentRouteModal() {
-    const route = lastSearchResults[activeRouteIndex];
-    if (!route) return;
-    const targetPal = palById.get(goalPalId);
-    const skillNames = lastSearchMeta.targetSkillIds
-      .map(sid => skillById.get(sid)?.name)
-      .filter(Boolean);
-    const defaultTitle = `${targetPal ? targetPal.name : "ルート"}${skillNames.length ? "（" + skillNames.join("・") + "）" : ""}`;
-
-    const html = `
-      <div class="form-group">
-        <label class="form-label">保存するルート名</label>
-        <input type="text" id="mSaveRouteTitle" class="input" value="${escapeHtml(defaultTitle)}" placeholder="例: 作業用アヌビス4スキル">
-      </div>
-      <div style="font-size:0.78rem; color:var(--text-secondary);">
-        ※ 家系図とステップ手順をブラウザに保存し、いつでも「📂 保存済みルート」から呼び出せます。
-      </div>
-    `;
-
-    openModal("配合ルートを保存", html, [
-      { label: "キャンセル" },
-      {
-        label: "💾 保存する",
-        className: "btn btn-emerald",
-        onClick: () => {
-          const title = document.getElementById("mSaveRouteTitle").value.trim() || defaultTitle;
-          const serialized = serializeRouteNode(route);
-          const now = new Date();
-          const savedAt = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-
-          savedRoutes.unshift({
-            id: Date.now() + Math.random(),
-            title,
-            savedAt,
-            goalPalId,
-            goalPalName: targetPal ? targetPal.name : "不明",
-            targetSkillIds: [...lastSearchMeta.targetSkillIds],
-            useOwnedFlagMode: Boolean(lastSearchMeta.useOwnedFlagMode),
-            steps: route.steps,
-            wildCount: route.wildCount,
-            routeTree: serialized
-          });
-          persistSavedRoutes();
-          showToast(`ルート「${title}」を保存しました`, "success");
-        }
-      }
-    ]);
-  }
-
-  function openSavedRoutesModal() {
-    if (savedRoutes.length === 0) {
-      openModal("保存済み配合ルート", `<div class="empty-state" style="padding:20px;">保存されているルートはまだありません。<br>ルート検索後に「💾 このルートを保存」ボタンから保存できます。</div>`, [
-        { label: "閉じる", className: "btn btn-primary" }
-      ]);
-      return;
-    }
-
-    const listHtml = savedRoutes.map(item => {
-      const skillsHtml = (item.targetSkillIds || [])
-        .map(sid => renderSkillBadgeHtml(skillById.get(sid)))
-        .join("");
-      return `
-        <div class="saved-route-item">
-          <div class="saved-route-top">
-            <div class="saved-route-title">${escapeHtml(item.title)}</div>
-            <div class="inline-flex-gap">
-              <button type="button" class="btn btn-primary btn-sm" data-load-route="${item.id}">呼び出す</button>
-              <button type="button" class="btn btn-danger btn-sm" data-del-route="${item.id}">削除</button>
-            </div>
-          </div>
-          <div class="saved-route-meta">
-            ゴール: <strong>${escapeHtml(item.goalPalName || "")}</strong> ／ ${item.steps}ステップ ／ 野良${item.wildCount}体 ／ 保存日時: ${escapeHtml(item.savedAt || "")}
-          </div>
-          ${skillsHtml ? `<div class="selected-skills-wrap" style="margin-top:2px; min-height:auto;">${skillsHtml}</div>` : ""}
-        </div>
-      `;
-    }).join("");
-
-    openModal(`保存済み配合ルート（${savedRoutes.length}件）`, `<div class="saved-routes-list">${listHtml}</div>`, [
-      { label: "閉じる" }
-    ]);
-
-    const bodyEl = document.getElementById("modalBody");
-    bodyEl.querySelectorAll("[data-load-route]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const id = Number(btn.dataset.loadRoute);
-        const item = savedRoutes.find(r => r.id === id);
-        if (!item) return;
-        const restored = deserializeRouteNode(item.routeTree);
-        if (!restored) {
-          showToast("一部のパルデータが見つからず復元できませんでした", "error");
-          return;
-        }
-        goalPalId = db.pals[restored.palIdx].id;
-        goalPalComboCtrl.setValue(db.pals[restored.palIdx].name);
-        goalSkillIds = (item.targetSkillIds || []).filter(sid => skillById.has(sid));
-        renderGoalSkills();
-
-        lastSearchResults = [restored];
-        lastSearchMeta = {
-          targetSkillIds: [...goalSkillIds],
-          useOwnedFlagMode: Boolean(item.useOwnedFlagMode)
-        };
-        activeRouteIndex = 0;
-        document.getElementById("searchPerfBadge").textContent = `保存済みルートを表示中`;
-        renderRouteResults(lastSearchMeta.targetSkillIds, lastSearchMeta.useOwnedFlagMode, item.title);
-        closeModal();
-        showToast(`「${item.title}」を呼び出しました`, "success");
-      });
-    });
-
-    bodyEl.querySelectorAll("[data-del-route]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const id = Number(btn.dataset.delRoute);
-        savedRoutes = savedRoutes.filter(r => r.id !== id);
-        persistSavedRoutes();
-        showToast("保存済みルートを削除しました");
-        openSavedRoutesModal();
-      });
-    });
-  }
-
-  /* --------------------------------------------------------------------------
-   * 6. 管理者ログイン・ログアウト機能
-   * -------------------------------------------------------------------------- */
-  function updateAdminUI() {
-    const dataTabBtn = document.getElementById("tabBtnData");
-    const triggerBtn = document.getElementById("btnAdminTrigger");
-
-    if (isAdmin) {
-      dataTabBtn.style.display = "flex";
-      triggerBtn.textContent = "🔓 管理者ログアウト";
-      triggerBtn.classList.add("logged-in");
-    } else {
-      dataTabBtn.style.display = "none";
-      triggerBtn.textContent = "🔒 管理者";
-      triggerBtn.classList.remove("logged-in");
-      // データ管理タブが開いていたらメインタブへ戻す
-      const dataPanel = document.getElementById("tab-data");
-      if (dataPanel.classList.contains("active")) {
-        switchMainTab("planner");
-      }
-    }
-  }
-
-  function openAdminLoginModal() {
-    const html = `
-      <div class="form-group">
-        <label class="form-label">管理者パスワードを入力してください</label>
-        <input type="password" id="mAdminPassInput" class="input" placeholder="パスワードを入力..." autocomplete="off">
-      </div>
-      <div style="font-size:0.76rem; color:var(--text-secondary);">
-        ※ 認証すると「⚙️ データ管理」タブが表示され、パルの追加・配合値の更新・仕様変更が可能になります。
-      </div>
-    `;
-
-    const tryLogin = () => {
-      const val = document.getElementById("mAdminPassInput").value;
-      if (val === ADMIN_PASSWORD) {
-        isAdmin = true;
-        sessionStorage.setItem(SESSION_KEY_ADMIN, "1");
-        updateAdminUI();
-        switchMainTab("data");
-        showToast("管理者モードでログインしました", "success");
-        return true;
-      } else {
-        showToast("パスワードが違います", "error");
-        document.getElementById("mAdminPassInput").value = "";
-        document.getElementById("mAdminPassInput").focus();
-        return false;
-      }
-    };
-
-    openModal("管理者ログイン", html, [
-      { label: "キャンセル" },
-      { label: "ログイン", className: "btn btn-primary", onClick: tryLogin }
-    ]);
-
-    const passInput = document.getElementById("mAdminPassInput");
-    setTimeout(() => passInput.focus(), 50);
-    passInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        if (tryLogin()) closeModal();
-      }
-    });
-  }
-
-  function logoutAdmin() {
-    isAdmin = false;
-    sessionStorage.removeItem(SESSION_KEY_ADMIN);
-    updateAdminUI();
-    showToast("管理者モードを終了しました");
-  }
-
-  /* --------------------------------------------------------------------------
-   * 7. ユーティリティ（図鑑番号ソート、ひらがな⇔カタカナ正規化、トースト、モーダル）
-   * -------------------------------------------------------------------------- */
+  /* ==========================================================================
+   * 5. ユーティリティ（図鑑No.昇順ソート・かな正規化・モーダル・トースト）
+   * ========================================================================== */
   function parseDex(dexStr) {
-    const s = String(dexStr ?? "").replace(/^#/, "").trim();
+    const s = String(dexStr == null ? "" : dexStr).replace(/^#/, "").trim();
     if (!s || s === "-1") return { num: 99999, suffix: "" };
     const m = s.match(/^(\d+)([A-Za-z]*)$/);
     if (!m) return { num: 99999, suffix: s };
@@ -2247,29 +2198,30 @@ tr:hover td {
       if (db.suffix === "") return 1;
       return da.suffix.localeCompare(db.suffix);
     }
-    return (a.name || "").localeCompare(b.name || "", "ja");
+    return String(a.name || "").localeCompare(String(b.name || ""), "ja");
   }
 
   function normalizeKana(str) {
     if (!str) return "";
-    return str
+    return String(str)
       .toLowerCase()
       .replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60))
       .trim();
   }
 
   function escapeHtml(str) {
-    return String(str)
+    return String(str == null ? "" : str)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
   }
 
-  function showToast(msg, type = "info") {
+  function showToast(msg, type) {
     const container = document.getElementById("toastContainer");
+    if (!container) return;
     const el = document.createElement("div");
-    el.className = `toast ${type}`;
+    el.className = "toast " + (type || "info");
     el.textContent = msg;
     container.appendChild(el);
     setTimeout(() => {
@@ -2286,12 +2238,13 @@ tr:hover td {
     actionsEl.innerHTML = "";
     buttons.forEach(b => {
       const btn = document.createElement("button");
+      btn.type = "button";
       btn.className = b.className || "btn";
       btn.textContent = b.label;
       btn.addEventListener("click", () => {
         if (b.onClick) {
-          const keepOpen = b.onClick();
-          if (keepOpen === false) return;
+          const res = b.onClick();
+          if (res === false) return;
         }
         closeModal();
       });
@@ -2308,27 +2261,40 @@ tr:hover td {
     if (e.target.id === "modalOverlay") closeModal();
   });
 
-  function renderSkillBadgeHtml(skill, removable = false, dataAttr = "") {
+  function renderSkillBadgeHtml(skill, removable, dataAttr) {
     if (!skill) return "";
-    const cls = skill.rank === "rainbow" ? "skill-rainbow" : skill.rank === "gold" ? "skill-gold" : "skill-white";
-    const xBtn = removable ? `<span class="remove-x" ${dataAttr} title="削除">×</span>` : "";
-    return `<span class="skill-badge ${cls}" title="${escapeHtml(skill.desc)}">${escapeHtml(skill.name)}${xBtn}</span>`;
+    const tier = normalizeTier(skill.tier, skill.rank);
+    const cls = tier === "rainbow" ? "skill-rainbow"
+      : tier === "gold" ? "skill-gold"
+      : tier === "red" ? "skill-red"
+      : "skill-white";
+    const catTag = (skill.category && skill.category !== "パル")
+      ? '<span class="skill-cat-tag">' + escapeHtml(skill.category) + '</span>'
+      : "";
+    const xBtn = removable ? '<span class="remove-x" ' + (dataAttr || "") + ' title="削除">×</span>' : "";
+    return '<span class="skill-badge ' + cls + '" title="' + escapeHtml(skill.desc || "") + '">' + escapeHtml(skill.name) + catTag + xBtn + '</span>';
   }
 
-  /* --------------------------------------------------------------------------
-   * 8. 絞り込み検索付きカスタムコンボボックス
-   * -------------------------------------------------------------------------- */
-  function createSearchCombo(containerId, { placeholder, getItems, onSelect, keepTextOnSelect = true }) {
+  /* ==========================================================================
+   * 6. 検索＆全件スクロール対応コンボボックス（件数制限なし）
+   * ========================================================================== */
+  function createSearchCombo(containerId, opts) {
     const container = document.getElementById(containerId);
-    container.innerHTML = `
-      <div class="combo-wrap">
-        <input type="text" class="combo-input" placeholder="${escapeHtml(placeholder)}" autocomplete="off">
-        <button type="button" class="combo-clear" title="クリア">×</button>
-        <div class="combo-list"></div>
-      </div>
-    `;
+    if (!container) return { setValue() {}, clear() {} };
+
+    const keepTextOnSelect = opts.keepTextOnSelect !== false;
+
+    container.innerHTML =
+      '<div class="combo-wrap">' +
+        '<input type="text" class="combo-input" placeholder="' + escapeHtml(opts.placeholder) + '" autocomplete="off">' +
+        '<button type="button" class="combo-clear" title="クリア">×</button>' +
+        '<button type="button" class="combo-toggle" title="一覧を開く">▼</button>' +
+        '<div class="combo-list"></div>' +
+      '</div>';
+
     const input = container.querySelector(".combo-input");
     const clearBtn = container.querySelector(".combo-clear");
+    const toggleBtn = container.querySelector(".combo-toggle");
     const listEl = container.querySelector(".combo-list");
 
     let currentItems = [];
@@ -2336,26 +2302,26 @@ tr:hover td {
 
     function renderList(query) {
       const q = normalizeKana(query);
-      const all = getItems();
+      const all = opts.getItems();
       currentItems = q
         ? all.filter(it => normalizeKana(it.searchText || it.label).includes(q))
         : all;
 
       if (currentItems.length === 0) {
-        listEl.innerHTML = `<div class="combo-empty">一致する候補がありません</div>`;
+        listEl.innerHTML = '<div class="combo-empty">一致する候補がありません</div>';
       } else {
-        listEl.innerHTML = currentItems.map((it, idx) => `
-          <div class="combo-item" data-idx="${idx}">
-            <span>${it.htmlLabel || escapeHtml(it.label)}</span>
-            <span class="combo-item-meta">${escapeHtml(it.meta || "")}</span>
-          </div>
-        `).join("");
+        listEl.innerHTML = currentItems.map((it, idx) =>
+          '<div class="combo-item" data-idx="' + idx + '">' +
+            '<span>' + (it.htmlLabel || escapeHtml(it.label)) + '</span>' +
+            '<span class="combo-item-meta">' + escapeHtml(it.meta || "") + '</span>' +
+          '</div>'
+        ).join("");
       }
       highlightIdx = -1;
     }
 
-    function openList() {
-      renderList(input.value);
+    function openList(showAll) {
+      renderList(showAll ? "" : input.value);
       listEl.classList.add("open");
     }
 
@@ -2364,21 +2330,41 @@ tr:hover td {
     }
 
     function selectItem(item) {
-      if (keepTextOnSelect) {
-        input.value = item.label;
-      } else {
-        input.value = "";
-      }
+      input.value = keepTextOnSelect ? item.label : "";
       closeList();
-      onSelect(item);
+      opts.onSelect(item);
     }
 
-    input.addEventListener("focus", openList);
-    input.addEventListener("input", openList);
+    input.addEventListener("focus", () => openList(false));
+    input.addEventListener("click", () => {
+      if (!listEl.classList.contains("open")) openList(false);
+    });
+    input.addEventListener("input", () => openList(false));
+
+    toggleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (listEl.classList.contains("open")) {
+        closeList();
+      } else {
+        openList(true);
+        input.focus();
+      }
+    });
+
+    clearBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      input.value = "";
+      opts.onSelect(null);
+      openList(true);
+      input.focus();
+    });
 
     input.addEventListener("keydown", (e) => {
       const rows = listEl.querySelectorAll(".combo-item");
-      if (!listEl.classList.contains("open")) return;
+      if (!listEl.classList.contains("open")) {
+        if (e.key === "ArrowDown") openList(false);
+        return;
+      }
       if (e.key === "ArrowDown") {
         e.preventDefault();
         highlightIdx = Math.min(highlightIdx + 1, rows.length - 1);
@@ -2406,14 +2392,9 @@ tr:hover td {
     listEl.addEventListener("mousedown", (e) => {
       const row = e.target.closest(".combo-item");
       if (!row) return;
+      e.preventDefault();
       const idx = Number(row.dataset.idx);
       if (currentItems[idx]) selectItem(currentItems[idx]);
-    });
-
-    clearBtn.addEventListener("click", () => {
-      input.value = "";
-      onSelect(null);
-      input.focus();
     });
 
     const onDocClick = (e) => {
@@ -2436,47 +2417,51 @@ tr:hover td {
       .slice()
       .sort(compareDex)
       .map(p => {
-        const rawDex = String(p.dexNo ?? "-").replace(/^#/, "");
-        const dexLabel = `#${rawDex}`;
-        const spBadge = p.isSpecialOnly ? ` <span class="mini-badge badge-special">★特殊</span>` : "";
+        const rawDex = String(p.dexNo == null ? "-" : p.dexNo).replace(/^#/, "");
+        const dexLabel = "#" + rawDex;
+        const spBadge = p.isSpecialOnly ? ' <span class="mini-badge badge-special">★特殊</span>' : "";
         return {
           id: p.id,
           label: p.name,
-          htmlLabel: `<span style="color:var(--accent-cyan);font-weight:700;margin-right:6px;">${escapeHtml(dexLabel)}</span><strong>${escapeHtml(p.name)}</strong>${spBadge}`,
-          meta: `配合値:${p.power}`,
-          searchText: `${dexLabel} ${rawDex} ${p.name} ${p.power}`
+          htmlLabel: '<span style="color:var(--accent-cyan);font-weight:700;margin-right:6px;">' + escapeHtml(dexLabel) + '</span><strong>' + escapeHtml(p.name) + '</strong>' + spBadge,
+          meta: "配合値:" + p.power,
+          searchText: dexLabel + " " + rawDex + " " + p.name + " " + p.power
         };
       });
   }
 
   function getSkillComboItems() {
-    const rankOrder = { rainbow: 0, gold: 1, white: 2 };
     return db.skills
       .slice()
-      .sort((a, b) => rankOrder[a.rank] - rankOrder[b.rank])
+      .sort((a, b) => {
+        const ta = TIER_ORDER[normalizeTier(a.tier, a.rank)] || 2;
+        const tb = TIER_ORDER[normalizeTier(b.tier, b.rank)] || 2;
+        if (tb !== ta) return tb - ta;
+        return (a.id || 0) - (b.id || 0);
+      })
       .map(s => ({
         id: s.id,
         label: s.name,
         htmlLabel: renderSkillBadgeHtml(s, false),
-        meta: s.desc,
-        searchText: `${s.name} ${s.desc}`
+        meta: s.desc || "",
+        searchText: s.name + " " + (s.category || "") + " " + (s.desc || "")
       }));
   }
 
-  /* --------------------------------------------------------------------------
-   * 9. タブ1: 最短合流ルート検索 UI & ロジック
-   * -------------------------------------------------------------------------- */
+  /* ==========================================================================
+   * 7. タブ1: 最短合流ルート検索 & ルート保存・呼び出し
+   * ========================================================================== */
   let goalPalComboCtrl, ownedPalComboCtrl;
 
   function initPlannerTab() {
     goalPalComboCtrl = createSearchCombo("goalPalCombo", {
-      placeholder: "パル名を入力して選択（例: アヌビス、ジェッドラン）",
+      placeholder: "パル名・図鑑Noで検索（クリックで全298体表示）",
       getItems: getPalComboItems,
       onSelect: (item) => { goalPalId = item ? item.id : null; }
     });
 
     createSearchCombo("goalSkillCombo", {
-      placeholder: "スキル名を入力して追加（最大4つ）",
+      placeholder: "スキル名・分類（世界樹/変異）・効果で検索（クリックで全件表示）",
       getItems: getSkillComboItems,
       keepTextOnSelect: false,
       onSelect: (item) => {
@@ -2522,7 +2507,6 @@ tr:hover td {
     document.getElementById("btnAddOwned").addEventListener("click", handleSaveOwned);
     document.getElementById("btnCancelEditOwned").addEventListener("click", resetOwnedDraft);
     document.getElementById("btnLoadSample").addEventListener("click", loadSampleSetup);
-    document.getElementById("btnOpenSavedRoutes").addEventListener("click", openSavedRoutesModal);
     document.getElementById("btnClearOwned").addEventListener("click", () => {
       if (ownedParents.length === 0) return;
       openModal("手持ちリストを全削除", "<p>登録されている手持ちの親パルをすべて削除しますか？</p>", [
@@ -2540,23 +2524,23 @@ tr:hover td {
     });
 
     document.getElementById("btnSearchRoute").addEventListener("click", executeRouteSearch);
+    document.getElementById("btnOpenSavedRoutes").addEventListener("click", openSavedRoutesModal);
 
     renderGoalSkills();
     renderDraftOwnedSkills();
     renderOwnedList();
-    updateSavedRoutesCountBtn();
+    updateSavedRoutesBadge();
   }
 
   function renderGoalSkills() {
     const wrap = document.getElementById("goalSkillsList");
     if (goalSkillIds.length === 0) {
-      wrap.innerHTML = `<span style="font-size:0.78rem; color:var(--text-muted);">未指定（スキル指定なしで種族到達ルートを検索します）</span>`;
+      wrap.innerHTML = '<span style="font-size:0.78rem; color:var(--text-muted);">未指定（種族到達ルートを検索します）</span>';
       return;
     }
-    wrap.innerHTML = goalSkillIds.map(sid => {
-      const s = skillById.get(sid);
-      return renderSkillBadgeHtml(s, true, `data-remove-goal-skill="${sid}"`);
-    }).join("");
+    wrap.innerHTML = goalSkillIds.map(sid =>
+      renderSkillBadgeHtml(skillById.get(sid), true, 'data-remove-goal-skill="' + sid + '"')
+    ).join("");
 
     wrap.querySelectorAll("[data-remove-goal-skill]").forEach(el => {
       el.addEventListener("click", () => {
@@ -2570,13 +2554,12 @@ tr:hover td {
   function renderDraftOwnedSkills() {
     const wrap = document.getElementById("ownedDraftSkills");
     if (draftOwnedSkillIds.length === 0) {
-      wrap.innerHTML = `<span style="font-size:0.78rem; color:var(--text-muted);">スキルなし（種族親として登録可能）</span>`;
+      wrap.innerHTML = '<span style="font-size:0.78rem; color:var(--text-muted);">スキルなし（種族親として登録可能）</span>';
       return;
     }
-    wrap.innerHTML = draftOwnedSkillIds.map(sid => {
-      const s = skillById.get(sid);
-      return renderSkillBadgeHtml(s, true, `data-remove-draft-skill="${sid}"`);
-    }).join("");
+    wrap.innerHTML = draftOwnedSkillIds.map(sid =>
+      renderSkillBadgeHtml(skillById.get(sid), true, 'data-remove-draft-skill="' + sid + '"')
+    ).join("");
 
     wrap.querySelectorAll("[data-remove-draft-skill]").forEach(el => {
       el.addEventListener("click", () => {
@@ -2601,7 +2584,7 @@ tr:hover td {
       showToast("手持ちの親を更新しました", "success");
     } else {
       ownedParents.push({
-        uid: Date.now() + Math.random(),
+        uid: Date.now() + Math.floor(Math.random() * 1000),
         palId: draftOwnedPalId,
         skillIds: [...draftOwnedSkillIds]
       });
@@ -2623,37 +2606,35 @@ tr:hover td {
 
   function renderOwnedList() {
     const container = document.getElementById("ownedListContainer");
-    document.getElementById("ownedCountLabel").textContent = `${ownedParents.length}体`;
+    document.getElementById("ownedCountLabel").textContent = ownedParents.length + "体";
 
     if (ownedParents.length === 0) {
-      container.innerHTML = `<div class="empty-state" style="padding:18px;">手持ちの親パルはまだ登録されていません。</div>`;
+      container.innerHTML = '<div class="empty-state" style="padding:18px;">手持ちの親パルはまだ登録されていません。</div>';
       return;
     }
 
     container.innerHTML = ownedParents.map(item => {
       const pal = palById.get(item.palId);
       if (!pal) return "";
-      const skillsHtml = item.skillIds.length > 0
-        ? item.skillIds.map(sid => renderSkillBadgeHtml(skillById.get(sid))).join("")
-        : `<span style="font-size:0.74rem; color:var(--text-muted);">スキルなし</span>`;
+      const skillsHtml = item.skillIds && item.skillIds.length > 0
+        ? item.skillIds.map(sid => renderSkillBadgeHtml(skillById.get(sid), false)).join("")
+        : '<span style="font-size:0.74rem; color:var(--text-muted);">スキルなし</span>';
 
-      return `
-        <div class="owned-item">
-          <div class="owned-item-top">
-            <div>
-              <span class="owned-pal-name">${escapeHtml(pal.name)}</span>
-              <span class="owned-pal-power">配合値 ${pal.power}</span>
-            </div>
-            <div class="owned-actions">
-              <button class="btn btn-sm" data-edit-owned="${item.uid}">編集</button>
-              <button class="btn btn-danger btn-sm" data-del-owned="${item.uid}">削除</button>
-            </div>
-          </div>
-          <div class="selected-skills-wrap" style="margin-top:4px; min-height:auto;">
-            ${skillsHtml}
-          </div>
-        </div>
-      `;
+      return (
+        '<div class="owned-item">' +
+          '<div class="owned-item-top">' +
+            '<div>' +
+              '<span class="owned-pal-name">' + escapeHtml(pal.name) + '</span>' +
+              '<span class="owned-pal-power">配合値 ' + pal.power + '</span>' +
+            '</div>' +
+            '<div class="inline-flex-gap">' +
+              '<button class="btn btn-sm" type="button" data-edit-owned="' + item.uid + '">編集</button>' +
+              '<button class="btn btn-danger btn-sm" type="button" data-del-owned="' + item.uid + '">削除</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="selected-skills-wrap" style="margin-top:4px; min-height:auto;">' + skillsHtml + '</div>' +
+        '</div>'
+      );
     }).join("");
 
     container.querySelectorAll("[data-edit-owned]").forEach(btn => {
@@ -2663,8 +2644,9 @@ tr:hover td {
         if (!target) return;
         editingOwnedUid = uid;
         draftOwnedPalId = target.palId;
-        draftOwnedSkillIds = [...target.skillIds];
-        ownedPalComboCtrl.setValue(palById.get(target.palId)?.name || "");
+        draftOwnedSkillIds = [...(target.skillIds || [])];
+        const palObj = palById.get(target.palId);
+        ownedPalComboCtrl.setValue(palObj ? palObj.name : "");
         renderDraftOwnedSkills();
         document.getElementById("btnAddOwned").textContent = "✓ 変更を保存";
         document.getElementById("btnCancelEditOwned").style.display = "inline-flex";
@@ -2682,27 +2664,28 @@ tr:hover td {
   }
 
   function loadSampleSetup() {
-    const findPal = name => db.pals.find(p => p.name === name)?.id;
-    const findSkill = name => db.skills.find(s => s.name === name)?.id;
+    const findPal = name => {
+      const p = db.pals.find(x => x.name === name);
+      return p ? p.id : null;
+    };
+    const findSkill = name => {
+      const s = db.skills.find(x => x.name === name);
+      return s ? s.id : null;
+    };
 
     const anubisId = findPal("アヌビス");
-    const s1 = findSkill("鬼神");
-    const s2 = findSkill("職人気質");
-    const s3 = findSkill("神速");
-    const s4 = findSkill("超絶技巧");
-
     if (anubisId) {
       goalPalId = anubisId;
       goalPalComboCtrl.setValue("アヌビス");
     }
-    goalSkillIds = [s1, s2, s3, s4].filter(Boolean);
+    goalSkillIds = ["鬼神", "職人気質", "伝説", "脳筋"].map(findSkill).filter(Boolean);
     renderGoalSkills();
 
     const sampleOwned = [
-      { pal: "ヤクモマル", skills: ["鬼神", "神速"] },
+      { pal: "ヤクモマル", skills: ["鬼神", "伝説"] },
       { pal: "ペコドン", skills: ["職人気質"] },
-      { pal: "フラリーナ", skills: ["超絶技巧"] },
-      { pal: "キャプペン", skills: ["伝説"] }
+      { pal: "フラリーナ", skills: ["脳筋"] },
+      { pal: "キャプペン", skills: ["超絶技巧"] }
     ];
 
     ownedParents = sampleOwned.map((s, i) => ({
@@ -2726,121 +2709,101 @@ tr:hover td {
     const excludeSpecialWild = document.getElementById("optExcludeSpecialWild").checked;
     const maxSteps = Number(document.getElementById("optMaxSteps").value);
     const result = findShortestMergeRoutes(goalPalId, goalSkillIds, ownedParents, allowWild, excludeSpecialWild, maxSteps);
-    document.getElementById("searchPerfBadge").textContent = `計算時間: ${result.elapsed.toFixed(1)} ms`;
+    document.getElementById("searchPerfBadge").textContent = "計算時間: " + result.elapsed.toFixed(1) + " ms";
 
     const area = document.getElementById("routeResultArea");
     if (result.error) {
-      area.innerHTML = `<div class="empty-state"><strong>検索できませんでした</strong>${escapeHtml(result.error)}</div>`;
+      area.innerHTML = '<div class="empty-state"><strong>検索できませんでした</strong>' + escapeHtml(result.error) + '</div>';
       return;
     }
 
     if (result.routes.length === 0) {
-      area.innerHTML = `
-        <div class="empty-state">
-          <strong>指定ステップ数（${maxSteps}回）以内で合流ルートが見つかりませんでした</strong>
-          最大探索ステップ数を増やすか、「手持ち以外のパルを経由親として自動補完する」をONにして再試行してください。<br>
-          （伝説・レイド限定など同種配合専用のパルをゴールにする場合は、手持ちにその種族が必要です）
-        </div>
-      `;
+      area.innerHTML =
+        '<div class="empty-state">' +
+          '<strong>指定ステップ数（' + maxSteps + '回）以内で合流ルートが見つかりませんでした</strong>' +
+          '最大探索ステップ数を増やすか、「手持ち以外のパルを経由親として自動補完する」をONにして再試行してください。<br>' +
+          '（伝説・レイド限定など同種配合専用のパルをゴールにする場合は、手持ちにその種族が必要です）' +
+        '</div>';
       return;
     }
 
     lastSearchResults = result.routes;
-    lastSearchMeta = {
-      targetSkillIds: result.targetSkillIds,
-      useOwnedFlagMode: result.useOwnedFlagMode
-    };
     activeRouteIndex = 0;
-    renderRouteResults(result.targetSkillIds, result.useOwnedFlagMode);
+    activeTargetSkillIds = result.targetSkillIds;
+    activeUseOwnedFlagMode = result.useOwnedFlagMode;
+    activeSavedRouteId = null;
+    activeCheckedSteps = {};
+    renderRouteResults(activeTargetSkillIds, activeUseOwnedFlagMode);
   }
 
-  function renderRouteResults(targetSkillIds, useOwnedFlagMode, loadedTitle = null) {
+  function renderRouteResults(targetSkillIds, useOwnedFlagMode) {
     const area = document.getElementById("routeResultArea");
     const route = lastSearchResults[activeRouteIndex];
     const targetPal = palById.get(goalPalId);
-
-    const switcherHtml = lastSearchResults.length > 1 ? `
-      <div class="route-switcher">
-        ${lastSearchResults.map((r, idx) => `
-          <button class="route-tab ${idx === activeRouteIndex ? "active" : ""}" data-route-idx="${idx}">
-            候補 ${idx + 1}（${r.steps}ステップ / 野良${r.wildCount}体）
-          </button>
-        `).join("")}
-      </div>
-    ` : "";
-
-    const loadedBannerHtml = loadedTitle ? `
-      <div style="margin-bottom:10px; padding:8px 12px; border-radius:8px; background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.35); font-size:0.82rem; color:#a7f3d0;">
-        📂 保存済みルートを表示中: <strong>${escapeHtml(loadedTitle)}</strong>
-      </div>
-    ` : "";
+    if (!route || !targetPal) return;
 
     const stepsList = [];
     const nodeStepMap = new Map();
-    let stepCounter = 0;
-
-    function assignSteps(node) {
-      if (node.type !== "bred") return;
-      assignSteps(node.left);
-      assignSteps(node.right);
-      stepCounter++;
-      nodeStepMap.set(node, stepCounter);
-      stepsList.push({
-        stepNo: stepCounter,
-        left: node.left,
-        right: node.right,
-        child: node
-      });
+    function collectSteps(node) {
+      if (!node || node.type !== "bred") return;
+      collectSteps(node.left);
+      collectSteps(node.right);
+      const stepNo = stepsList.length + 1;
+      nodeStepMap.set(node, stepNo);
+      stepsList.push({ stepNo, left: node.left, right: node.right, child: node });
     }
-    assignSteps(route);
+    collectSteps(route);
 
-    const summaryHtml = `
-      <div class="result-summary-bar">
-        <div class="summary-metrics-group">
-          <div class="summary-metric">
-            <span>ゴールパル</span>
-            <strong style="color:#fff;">${escapeHtml(targetPal.name)}</strong>
-          </div>
-          <div class="summary-metric">
-            <span>合計配合ステップ数</span>
-            <strong>${route.steps} ステップ</strong>
-          </div>
-          <div class="summary-metric">
-            <span>必要ケーキ目安</span>
-            <strong>${route.steps === 0 ? "0 個（達成済）" : `約 ${route.steps * 5} 〜 ${route.steps * 15} 個`}</strong>
-          </div>
-          <div class="summary-metric">
-            <span>経由（野良）パル使用数</span>
-            <strong style="color:var(--accent-cyan);">${route.wildCount} 体</strong>
-          </div>
-        </div>
-        <button type="button" id="btnSaveCurrentRoute" class="btn btn-emerald btn-sm">💾 このルートを保存</button>
-      </div>
-    `;
+    const savedBannerHtml = activeSavedRouteId
+      ? '<span class="mini-badge badge-owned" style="padding:4px 9px; font-size:0.75rem;">📂 保存済みルート表示中（チェック進捗を自動保存）</span>'
+      : "";
 
-    function buildTreeHtml(node, isRoot = false) {
+    const routeTabsHtml = lastSearchResults.length > 1
+      ? lastSearchResults.map((r, idx) =>
+          '<button class="route-tab ' + (idx === activeRouteIndex ? "active" : "") + '" type="button" data-route-idx="' + idx + '">' +
+            '候補 ' + (idx + 1) + '（' + r.steps + 'ステップ / 野良' + r.wildCount + '体）' +
+          '</button>'
+        ).join("")
+      : "";
+
+    const switcherHtml =
+      '<div class="inline-flex-gap" style="justify-content:space-between; margin-bottom:14px;">' +
+        '<div class="route-switcher">' + routeTabsHtml + savedBannerHtml + '</div>' +
+        '<button id="btnSaveCurrentRoute" class="btn btn-gold btn-sm" type="button">💾 このルートを保存</button>' +
+      '</div>';
+
+    const summaryHtml =
+      '<div class="result-summary-bar">' +
+        '<div class="summary-metric"><span>ゴール</span><strong>' + escapeHtml(targetPal.name) + '</strong></div>' +
+        '<div class="summary-metric"><span>最小配合ステップ数（ケーキ目安）</span><strong>' + route.steps + ' ステップ</strong></div>' +
+        '<div class="summary-metric"><span>野良（経由）親</span><strong>' + route.wildCount + ' 体</strong></div>' +
+        '<div class="summary-metric"><span>対象スキル数</span><strong>' + (useOwnedFlagMode ? "指定なし" : targetSkillIds.length + " 個") + '</strong></div>' +
+      '</div>';
+
+    function buildTreeHtml(node, isRoot) {
       const pal = db.pals[node.palIdx];
+      if (!pal) return "";
       let nodeCls = "tree-node ";
       let badgeHtml = "";
 
       if (isRoot) {
         nodeCls += "node-goal";
-        badgeHtml += `<span class="mini-badge badge-goal">★ GOAL</span>`;
+        badgeHtml += '<span class="mini-badge badge-goal">★ GOAL</span>';
       } else if (node.type === "owned") {
         nodeCls += "node-owned";
-        badgeHtml += `<span class="mini-badge badge-owned">手持ち</span>`;
+        badgeHtml += '<span class="mini-badge badge-owned">手持ち</span>';
       } else if (node.type === "wild") {
         nodeCls += "node-wild";
-        badgeHtml += `<span class="mini-badge badge-wild">経由（野良）</span>`;
+        badgeHtml += '<span class="mini-badge badge-wild">経由（野良）</span>';
       } else {
         nodeCls += "node-bred";
       }
 
       if (node.type === "bred") {
         const sNo = nodeStepMap.get(node);
-        badgeHtml += `<span class="mini-badge badge-bred">Step ${sNo}</span>`;
+        badgeHtml += '<span class="mini-badge badge-bred">Step ' + sNo + '</span>';
         if (node.isSpecial) {
-          badgeHtml += `<span class="mini-badge badge-special">★特殊配合</span>`;
+          badgeHtml += '<span class="mini-badge badge-special">★特殊配合</span>';
         }
       }
 
@@ -2848,115 +2811,254 @@ tr:hover td {
       if (!useOwnedFlagMode && node.mask > 0) {
         const matched = targetSkillIds
           .filter((sid, bit) => (node.mask & (1 << bit)) !== 0)
-          .map(sid => renderSkillBadgeHtml(skillById.get(sid)));
-        skillsHtml = `<div class="node-skills">${matched.join("")}</div>`;
+          .map(sid => renderSkillBadgeHtml(skillById.get(sid), false));
+        skillsHtml = '<div class="node-skills">' + matched.join("") + '</div>';
       } else if (node.type === "wild") {
-        skillsHtml = `<div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">無スキル親として捕獲</div>`;
+        skillsHtml = '<div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">無スキル親として捕獲</div>';
       }
 
-      const cardHtml = `
-        <div class="${nodeCls}">
-          <div class="node-badges">${badgeHtml}</div>
-          <div class="node-name">
-            <span>${escapeHtml(pal.name)}</span>
-            <span class="node-power">値:${pal.power}</span>
-          </div>
-          ${skillsHtml}
-        </div>
-      `;
+      const cardHtml =
+        '<div class="' + nodeCls + '">' +
+          '<div class="node-badges">' + badgeHtml + '</div>' +
+          '<div class="node-name"><span>' + escapeHtml(pal.name) + '</span><span class="node-power">値:' + pal.power + '</span></div>' +
+          skillsHtml +
+        '</div>';
 
-      if (node.type !== "bred") {
-        return cardHtml;
-      }
+      if (node.type !== "bred") return cardHtml;
 
-      return `
-        <div class="tree-branch">
-          <div class="tree-parents">
-            <div class="tree-parent-slot">${buildTreeHtml(node.left, false)}</div>
-            <div class="tree-parent-slot">${buildTreeHtml(node.right, false)}</div>
-          </div>
-          <div class="tree-child-wrap">
-            ${cardHtml}
-          </div>
-        </div>
-      `;
+      return (
+        '<div class="tree-branch">' +
+          '<div class="tree-parents">' +
+            '<div class="tree-parent-slot">' + buildTreeHtml(node.left, false) + '</div>' +
+            '<div class="tree-parent-slot">' + buildTreeHtml(node.right, false) + '</div>' +
+          '</div>' +
+          '<div class="tree-child-wrap">' + cardHtml + '</div>' +
+        '</div>'
+      );
     }
 
     let checklistHtml = "";
     if (stepsList.length === 0) {
-      checklistHtml = `<div style="padding:12px; color:var(--accent-emerald); font-weight:700;">すでに条件をすべて満たすパルが手持ちに存在します！</div>`;
+      checklistHtml = '<div style="padding:12px; color:var(--accent-emerald); font-weight:700;">すでに条件をすべて満たすパルが手持ちに存在します！</div>';
     } else {
-      checklistHtml = `
-        <h3 style="margin:0 0 10px; font-size:0.94rem; color:var(--text-primary);">📋 ステップ別 作業チェックリスト</h3>
-        <div class="checklist">
-          ${stepsList.map(st => {
-            const pA = db.pals[st.left.palIdx];
-            const pB = db.pals[st.right.palIdx];
-            const pC = db.pals[st.child.palIdx];
-            const tagA = st.left.type === "owned" ? "[手持ち]" : st.left.type === "wild" ? "[野良]" : `[Step ${nodeStepMap.get(st.left)}産]`;
-            const tagB = st.right.type === "owned" ? "[手持ち]" : st.right.type === "wild" ? "[野良]" : `[Step ${nodeStepMap.get(st.right)}産]`;
-            const inheritedNames = !useOwnedFlagMode
-              ? targetSkillIds.filter((sid, bit) => (st.child.mask & (1 << bit)) !== 0).map(sid => skillById.get(sid)?.name)
-              : [];
-            const spLabel = st.child.isSpecial ? " <span class='mini-badge badge-special'>★特殊配合</span>" : "";
-            return `
-              <label class="check-step">
-                <input type="checkbox" class="step-checkbox">
-                <div class="step-body">
-                  <div class="step-formula">
-                    Step ${st.stepNo}: ${escapeHtml(pA.name)}<span style="color:var(--text-secondary);font-size:0.78rem;">${tagA}</span>
-                    × ${escapeHtml(pB.name)}<span style="color:var(--text-secondary);font-size:0.78rem;">${tagB}</span>
-                    → <span style="color:var(--accent-gold);">${escapeHtml(pC.name)}</span>${spLabel}
-                  </div>
-                  <div class="step-sub">
-                    ${inheritedNames.length > 0 ? `継承狙いスキル: <strong>${inheritedNames.map(escapeHtml).join(" / ")}</strong>` : "種族経由の配合"}
-                  </div>
-                </div>
-              </label>
-            `;
-          }).join("")}
-        </div>
-      `;
+      checklistHtml =
+        '<h3 style="margin:0 0 10px; font-size:0.94rem;">📋 ステップ別 作業チェックリスト</h3>' +
+        '<div class="checklist">' +
+        stepsList.map(st => {
+          const pA = db.pals[st.left.palIdx];
+          const pB = db.pals[st.right.palIdx];
+          const pC = db.pals[st.child.palIdx];
+          const tagA = st.left.type === "owned" ? "[手持ち]" : st.left.type === "wild" ? "[野良]" : "[Step " + nodeStepMap.get(st.left) + "産]";
+          const tagB = st.right.type === "owned" ? "[手持ち]" : st.right.type === "wild" ? "[野良]" : "[Step " + nodeStepMap.get(st.right) + "産]";
+          const inheritedNames = !useOwnedFlagMode
+            ? targetSkillIds
+                .filter((sid, bit) => (st.child.mask & (1 << bit)) !== 0)
+                .map(sid => { const sk = skillById.get(sid); return sk ? sk.name : ""; })
+                .filter(Boolean)
+            : [];
+          const spLabel = st.child.isSpecial ? ' <span class="mini-badge badge-special">★特殊配合</span>' : "";
+          const isChecked = Boolean(activeCheckedSteps[st.stepNo]);
+          return (
+            '<label class="check-step ' + (isChecked ? "done" : "") + '">' +
+              '<input type="checkbox" class="step-checkbox" data-step-no="' + st.stepNo + '" ' + (isChecked ? "checked" : "") + '>' +
+              '<div class="step-body">' +
+                '<div class="step-formula">' +
+                  'Step ' + st.stepNo + ': ' + escapeHtml(pA ? pA.name : "") + '<span style="color:var(--text-secondary);font-size:0.78rem;">' + tagA + '</span>' +
+                  ' × ' + escapeHtml(pB ? pB.name : "") + '<span style="color:var(--text-secondary);font-size:0.78rem;">' + tagB + '</span>' +
+                  ' → <span style="color:var(--accent-gold);">' + escapeHtml(pC ? pC.name : "") + '</span>' + spLabel +
+                '</div>' +
+                '<div class="step-sub">' +
+                  (inheritedNames.length > 0 ? '継承狙いスキル: <strong>' + inheritedNames.map(escapeHtml).join(" / ") + '</strong>' : "種族経由の配合") +
+                '</div>' +
+              '</div>' +
+            '</label>'
+          );
+        }).join("") +
+        '</div>';
     }
 
-    area.innerHTML = `
-      ${loadedBannerHtml}
-      ${switcherHtml}
-      ${summaryHtml}
-      <div style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:6px;">
-        ※ 左から右へ合流します（横スクロール対応）
-      </div>
-      <div class="tree-viewport">
-        ${buildTreeHtml(route, true)}
-      </div>
-      ${checklistHtml}
-    `;
+    area.innerHTML =
+      switcherHtml +
+      summaryHtml +
+      '<div style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:6px;">※ 左から右へ合流します（横スクロール対応）</div>' +
+      '<div class="tree-viewport">' + buildTreeHtml(route, true) + '</div>' +
+      checklistHtml;
 
-    const saveBtn = document.getElementById("btnSaveCurrentRoute");
-    if (saveBtn) {
-      saveBtn.addEventListener("click", openSaveCurrentRouteModal);
-    }
+    const btnSave = document.getElementById("btnSaveCurrentRoute");
+    if (btnSave) btnSave.addEventListener("click", openSaveRouteModal);
 
     area.querySelectorAll("[data-route-idx]").forEach(btn => {
       btn.addEventListener("click", () => {
         activeRouteIndex = Number(btn.dataset.routeIdx);
+        activeSavedRouteId = null;
+        activeCheckedSteps = {};
         renderRouteResults(targetSkillIds, useOwnedFlagMode);
       });
     });
 
     area.querySelectorAll(".step-checkbox").forEach(cb => {
       cb.addEventListener("change", () => {
+        const stepNo = Number(cb.dataset.stepNo);
+        activeCheckedSteps[stepNo] = cb.checked;
         cb.closest(".check-step").classList.toggle("done", cb.checked);
+        if (activeSavedRouteId) {
+          const saved = savedRoutes.find(r => r.id === activeSavedRouteId);
+          if (saved) {
+            saved.checkedSteps = Object.assign({}, activeCheckedSteps);
+            saveSavedRoutes();
+          }
+        }
       });
     });
   }
 
-  /* --------------------------------------------------------------------------
-   * 10. タブ2: 単体配合・逆引きチェック
-   * -------------------------------------------------------------------------- */
+  function openSaveRouteModal() {
+    const route = lastSearchResults[activeRouteIndex];
+    const targetPal = palById.get(goalPalId);
+    if (!route || !targetPal) return;
+
+    const skillNames = activeTargetSkillIds
+      .map(sid => { const sk = skillById.get(sid); return sk ? sk.name : ""; })
+      .filter(Boolean);
+    const defaultName = skillNames.length > 0
+      ? targetPal.name + "（" + skillNames.join("・") + "）"
+      : targetPal.name + "（" + route.steps + "ステップ）";
+
+    const html =
+      '<div class="form-group">' +
+        '<label class="form-label">保存するルート名</label>' +
+        '<input type="text" id="mSaveRouteName" class="input" value="' + escapeHtml(defaultName) + '" placeholder="例: アヌビス（鬼神・職人気質）">' +
+      '</div>' +
+      '<div style="font-size:0.78rem; color:var(--text-secondary);">ゴール設定・家系図・現在のチェックリスト進捗をブラウザ（localStorage）に保存します。</div>';
+
+    openModal("配合ルートを保存", html, [
+      { label: "キャンセル" },
+      {
+        label: "保存する",
+        className: "btn btn-gold",
+        onClick: () => {
+          const name = document.getElementById("mSaveRouteName").value.trim();
+          if (!name) {
+            showToast("ルート名を入力してください", "error");
+            return false;
+          }
+          const newId = Date.now() + Math.floor(Math.random() * 1000);
+          const now = new Date();
+          const savedAt = now.getFullYear() + "/" +
+            String(now.getMonth() + 1).padStart(2, "0") + "/" +
+            String(now.getDate()).padStart(2, "0") + " " +
+            String(now.getHours()).padStart(2, "0") + ":" +
+            String(now.getMinutes()).padStart(2, "0");
+
+          savedRoutes.unshift({
+            id: newId,
+            name,
+            goalPalId,
+            goalPalName: targetPal.name,
+            targetSkillIds: [...activeTargetSkillIds],
+            useOwnedFlagMode: activeUseOwnedFlagMode,
+            steps: route.steps,
+            wildCount: route.wildCount,
+            routeData: JSON.parse(JSON.stringify(route)),
+            checkedSteps: Object.assign({}, activeCheckedSteps),
+            savedAt
+          });
+          activeSavedRouteId = newId;
+          saveSavedRoutes();
+          renderRouteResults(activeTargetSkillIds, activeUseOwnedFlagMode);
+          showToast("「" + name + "」を保存しました", "success");
+        }
+      }
+    ]);
+  }
+
+  function openSavedRoutesModal() {
+    if (savedRoutes.length === 0) {
+      openModal(
+        "保存済みルート一覧",
+        '<div class="empty-state" style="padding:20px;">保存されている配合ルートはまだありません。<br>検索結果画面の「💾 このルートを保存」から保存できます。</div>',
+        [{ label: "閉じる" }]
+      );
+      return;
+    }
+
+    const listHtml =
+      '<div style="max-height:380px; overflow-y:auto; padding-right:4px;">' +
+      savedRoutes.map(r => {
+        const doneCount = Object.values(r.checkedSteps || {}).filter(Boolean).length;
+        return (
+          '<div class="saved-route-item">' +
+            '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">' +
+              '<div>' +
+                '<strong style="color:#fff; font-size:0.94rem;">' + escapeHtml(r.name) + '</strong>' +
+                '<div class="saved-route-meta">' +
+                  'ゴール: <strong style="color:var(--accent-gold);">' + escapeHtml(r.goalPalName) + '</strong> ／ ' +
+                  r.steps + 'ステップ（完了: ' + doneCount + '/' + r.steps + '） ／ ' +
+                  '保存: ' + escapeHtml(r.savedAt) +
+                '</div>' +
+              '</div>' +
+              '<div class="inline-flex-gap" style="flex-shrink:0;">' +
+                '<button class="btn btn-primary btn-sm" type="button" data-load-route="' + r.id + '">呼び出す</button>' +
+                '<button class="btn btn-danger btn-sm" type="button" data-del-route="' + r.id + '">削除</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>'
+        );
+      }).join("") +
+      '</div>';
+
+    openModal("保存済みルート一覧（" + savedRoutes.length + "件）", listHtml, [{ label: "閉じる" }]);
+
+    document.getElementById("modalBody").querySelectorAll("[data-load-route]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        loadSavedRouteById(Number(btn.dataset.loadRoute));
+        closeModal();
+      });
+    });
+
+    document.getElementById("modalBody").querySelectorAll("[data-del-route]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        deleteSavedRouteById(Number(btn.dataset.delRoute));
+        openSavedRoutesModal();
+      });
+    });
+  }
+
+  function loadSavedRouteById(id) {
+    const saved = savedRoutes.find(r => r.id === id);
+    if (!saved) return;
+
+    goalPalId = saved.goalPalId;
+    const palObj = palById.get(goalPalId);
+    goalPalComboCtrl.setValue(palObj ? palObj.name : (saved.goalPalName || ""));
+    goalSkillIds = [...(saved.targetSkillIds || [])];
+    renderGoalSkills();
+
+    lastSearchResults = [JSON.parse(JSON.stringify(saved.routeData))];
+    activeRouteIndex = 0;
+    activeTargetSkillIds = [...(saved.targetSkillIds || [])];
+    activeUseOwnedFlagMode = Boolean(saved.useOwnedFlagMode);
+    activeSavedRouteId = saved.id;
+    activeCheckedSteps = Object.assign({}, saved.checkedSteps || {});
+
+    document.getElementById("searchPerfBadge").textContent = "保存日時: " + saved.savedAt;
+    renderRouteResults(activeTargetSkillIds, activeUseOwnedFlagMode);
+    showToast("「" + saved.name + "」を呼び出しました", "success");
+  }
+
+  function deleteSavedRouteById(id) {
+    savedRoutes = savedRoutes.filter(r => r.id !== id);
+    if (activeSavedRouteId === id) activeSavedRouteId = null;
+    saveSavedRoutes();
+    showToast("保存済みルートを削除しました");
+  }
+
+  /* ==========================================================================
+   * 8. タブ2: 単体配合・逆引きチェック
+   * ========================================================================== */
   function initLookupTab() {
     createSearchCombo("singleParentACombo", {
-      placeholder: "親Aを選択...",
+      placeholder: "親Aを選択（全298体・図鑑順）",
       getItems: getPalComboItems,
       onSelect: (item) => {
         singleParentAId = item ? item.id : null;
@@ -2965,7 +3067,7 @@ tr:hover td {
     });
 
     createSearchCombo("singleParentBCombo", {
-      placeholder: "親Bを選択...",
+      placeholder: "親Bを選択（全298体・図鑑順）",
       getItems: getPalComboItems,
       onSelect: (item) => {
         singleParentBId = item ? item.id : null;
@@ -2988,7 +3090,7 @@ tr:hover td {
   function updateSingleCalc() {
     const box = document.getElementById("singleCalcResult");
     if (!singleParentAId || !singleParentBId) {
-      box.innerHTML = `<div style="color:var(--text-secondary); font-size:0.86rem;">親Aと親Bを選択すると、生まれるパルと計算式を即座に表示します。</div>`;
+      box.innerHTML = '<div style="color:var(--text-secondary); font-size:0.86rem;">親Aと親Bを選択すると、生まれるパルと計算式を即座に表示します。</div>';
       return;
     }
     const res = getBreedingResultByIds(singleParentAId, singleParentBId);
@@ -2998,31 +3100,30 @@ tr:hover td {
 
     let ruleDesc = "";
     if (res.sameSpecies) {
-      ruleDesc = `同種配合（常に同じパルが生まれます）`;
+      ruleDesc = "同種配合（常に同じパルが生まれます）";
     } else if (res.isSpecial) {
-      ruleDesc = `<span class="mini-badge badge-special">★特殊配合適用</span> 固有の組み合わせが優先されました`;
+      ruleDesc = '<span class="mini-badge badge-special">★特殊配合適用</span> 固有の組み合わせが優先されました';
     } else {
-      ruleDesc = `基本式: floor((${pA.power} + ${pB.power} + 1) / 2) = <strong>${res.avg}</strong> → 最も近い配合値: <strong>${res.child.power}</strong>`;
+      ruleDesc = "基本式: floor((" + pA.power + " + " + pB.power + " + 1) / 2) = <strong>" + res.avg + "</strong> → 最も近い配合値: <strong>" + res.child.power + "</strong>";
     }
 
-    box.innerHTML = `
-      <div style="font-size:0.82rem; color:var(--text-secondary);">生まれるパル</div>
-      <div class="calc-child-name">${escapeHtml(res.child.name)}</div>
-      <div style="font-size:0.8rem; color:var(--accent-cyan); margin-bottom:8px;">配合値: ${res.child.power} / 優先度: ${res.child.indexOrder}</div>
-      <div style="font-size:0.8rem; color:var(--text-secondary);">${ruleDesc}</div>
-    `;
+    box.innerHTML =
+      '<div style="font-size:0.82rem; color:var(--text-secondary);">生まれるパル</div>' +
+      '<div class="calc-child-name">' + escapeHtml(res.child.name) + '</div>' +
+      '<div style="font-size:0.8rem; color:var(--accent-cyan); margin-bottom:8px;">図鑑: #' + escapeHtml(res.child.dexNo) + ' / 配合値: ' + res.child.power + ' / 同値優先度: ' + res.child.priority + '</div>' +
+      '<div style="font-size:0.8rem; color:var(--text-secondary);">' + ruleDesc + '</div>';
   }
 
   function updateReverseLookup() {
     const tbody = document.getElementById("reverseResultBody");
     const meta = document.getElementById("reverseResultMeta");
-    if (!reverseTargetId || !palIndexById.has(reverseTargetId)) {
+    if (!reverseTargetId || !palIdxById.has(reverseTargetId)) {
       meta.textContent = "";
-      tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding:24px;">目的のパルを選択してください</td></tr>`;
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding:24px;">目的のパルを選択してください</td></tr>';
       return;
     }
 
-    const targetIdx = palIndexById.get(reverseTargetId);
+    const targetIdx = palIdxById.get(reverseTargetId);
     const N = db.pals.length;
     const q = normalizeKana(document.getElementById("reverseFilterInput").value);
     const pairs = [];
@@ -3032,42 +3133,39 @@ tr:hover td {
         if (breedTable[i * N + j] === targetIdx) {
           const pA = db.pals[i];
           const pB = db.pals[j];
-          if (q && !normalizeKana(pA.name).includes(q) && !normalizeKana(pB.name).includes(q)) {
-            continue;
-          }
-          const isSp = isSpecialPairTable[i * N + j] === 1;
-          pairs.push({ pA, pB, isSp, isSame: i === j });
+          if (q && !normalizeKana(pA.name).includes(q) && !normalizeKana(pB.name).includes(q)) continue;
+          pairs.push({ pA, pB, isSp: specialPairTable[i * N + j] === 1, isSame: i === j });
         }
       }
     }
 
     pairs.sort((a, b) => (b.isSp ? 1 : 0) - (a.isSp ? 1 : 0));
+    meta.textContent = "一致した組み合わせ: " + pairs.length + " 件（最大200件表示）";
 
-    meta.textContent = `一致した組み合わせ: ${pairs.length} 件（最大200件表示）`;
     if (pairs.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding:24px;">該当する組み合わせがありません</td></tr>`;
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding:24px;">該当する組み合わせがありません</td></tr>';
       return;
     }
 
     tbody.innerHTML = pairs.slice(0, 200).map(pair => {
       const badge = pair.isSp
-        ? `<span class="mini-badge badge-special">★特殊配合</span>`
+        ? '<span class="mini-badge badge-special">★特殊配合</span>'
         : pair.isSame
-          ? `<span class="mini-badge badge-owned">同種配合</span>`
-          : `<span class="mini-badge badge-bred">通常配合</span>`;
-      return `
-        <tr>
-          <td><strong>${escapeHtml(pair.pA.name)}</strong> <span style="color:var(--text-muted);font-size:0.75rem;">(${pair.pA.power})</span></td>
-          <td><strong>${escapeHtml(pair.pB.name)}</strong> <span style="color:var(--text-muted);font-size:0.75rem;">(${pair.pB.power})</span></td>
-          <td>${badge}</td>
-        </tr>
-      `;
+          ? '<span class="mini-badge badge-owned">同種配合</span>'
+          : '<span class="mini-badge badge-bred">通常配合</span>';
+      return (
+        '<tr>' +
+          '<td><strong>' + escapeHtml(pair.pA.name) + '</strong> <span style="color:var(--text-muted);font-size:0.75rem;">(' + pair.pA.power + ')</span></td>' +
+          '<td><strong>' + escapeHtml(pair.pB.name) + '</strong> <span style="color:var(--text-muted);font-size:0.75rem;">(' + pair.pB.power + ')</span></td>' +
+          '<td>' + badge + '</td>' +
+        '</tr>'
+      );
     }).join("");
   }
 
-  /* --------------------------------------------------------------------------
-   * 11. タブ3: データ管理（管理者専用）
-   * -------------------------------------------------------------------------- */
+  /* ==========================================================================
+   * 9. タブ3: データ管理（管理者モード）
+   * ========================================================================== */
   function initDataTab() {
     document.querySelectorAll(".sub-tab-btn").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -3075,7 +3173,7 @@ tr:hover td {
         btn.classList.add("active");
         const target = btn.dataset.subtab;
         document.querySelectorAll(".subtab-panel").forEach(p => {
-          p.style.display = p.id === `subtab-${target}` ? "block" : "none";
+          p.style.display = p.id === ("subtab-" + target) ? "block" : "none";
         });
       });
     });
@@ -3086,10 +3184,9 @@ tr:hover td {
     document.getElementById("filterSkillsInput").addEventListener("input", renderSkillsTable);
 
     document.getElementById("btnAddPalModal").addEventListener("click", () => openPalEditModal(null));
-    document.getElementById("btnAddSpecialModal").addEventListener("click", () => openSpecialAddModal());
+    document.getElementById("btnAddSpecialModal").addEventListener("click", openSpecialAddModal);
     document.getElementById("btnAddSkillModal").addEventListener("click", () => openSkillEditModal(null));
     document.getElementById("btnOpenOpggImport").addEventListener("click", openOpggImportModal);
-    document.getElementById("btnAdminLogoutTop").addEventListener("click", logoutAdmin);
 
     document.getElementById("btnExportJson").addEventListener("click", () => {
       downloadFile(JSON.stringify(db, null, 2), "palworld_breeding_data.json", "application/json");
@@ -3099,7 +3196,7 @@ tr:hover td {
     document.getElementById("btnOpenImportJson").addEventListener("click", openJsonImportModal);
 
     document.getElementById("btnResetDefaultData").addEventListener("click", () => {
-      openModal("初期データにリセット", "<p>追加・編集したパル、特殊配合、スキルデータをすべて初期内蔵データに戻します。よろしいですか？</p>", [
+      openModal("初期データにリセット", "<p>追加・編集したパル、特殊配合、スキルデータをすべて初期内蔵データ（298体・123スキル）に戻します。よろしいですか？</p>", [
         { label: "キャンセル" },
         {
           label: "リセット実行",
@@ -3118,10 +3215,6 @@ tr:hover td {
     document.getElementById("btnExportSpecialsCsv").addEventListener("click", exportSpecialsCsv);
     document.getElementById("btnExportSkillsCsv").addEventListener("click", exportSkillsCsv);
 
-    document.getElementById("btnImportPalsCsv").addEventListener("click", () => triggerCsvImport("pals"));
-    document.getElementById("btnImportSpecialsCsv").addEventListener("click", () => triggerCsvImport("specials"));
-    document.getElementById("btnImportSkillsCsv").addEventListener("click", () => triggerCsvImport("skills"));
-
     renderAllDataTables();
   }
 
@@ -3133,9 +3226,9 @@ tr:hover td {
 
   function renderPalsTable() {
     const q = normalizeKana(document.getElementById("filterPalsInput").value);
-    const sortMode = document.getElementById("sortPalsSelect")?.value || "dex";
+    const sortMode = document.getElementById("sortPalsSelect").value || "dex";
     const list = db.pals
-      .filter(p => !q || normalizeKana(`${p.name} #${p.dexNo || ""} ${p.dexNo || ""} ${p.power}`).includes(q))
+      .filter(p => !q || normalizeKana(p.name + " #" + p.dexNo + " " + p.dexNo + " " + p.power).includes(q))
       .slice()
       .sort((a, b) => {
         if (sortMode === "power_asc") return a.power - b.power || compareDex(a, b);
@@ -3143,22 +3236,23 @@ tr:hover td {
         if (sortMode === "name") return a.name.localeCompare(b.name, "ja");
         return compareDex(a, b);
       });
+
     const tbody = document.getElementById("tablePalsBody");
-    tbody.innerHTML = list.map(p => `
-      <tr>
-        <td style="color:var(--text-secondary);">#${escapeHtml(p.dexNo || String(p.id))}</td>
-        <td><strong>${escapeHtml(p.name)}</strong></td>
-        <td>${p.power}</td>
-        <td>${p.indexOrder}</td>
-        <td>${p.isSpecialOnly ? '<span class="mini-badge badge-special">限定</span>' : '-'}</td>
-        <td>
-          <div class="inline-flex-gap">
-            <button class="btn btn-sm" data-edit-pal="${p.id}">編集</button>
-            <button class="btn btn-danger btn-sm" data-del-pal="${p.id}">削除</button>
-          </div>
-        </td>
-      </tr>
-    `).join("");
+    tbody.innerHTML = list.map(p =>
+      '<tr>' +
+        '<td style="color:var(--text-secondary);">#' + escapeHtml(p.dexNo) + '</td>' +
+        '<td><strong>' + escapeHtml(p.name) + '</strong></td>' +
+        '<td>' + p.power + '</td>' +
+        '<td>' + p.priority + '</td>' +
+        '<td>' + (p.isSpecialOnly ? '<span class="mini-badge badge-special">限定</span>' : '-') + '</td>' +
+        '<td>' +
+          '<div class="inline-flex-gap">' +
+            '<button class="btn btn-sm" type="button" data-edit-pal="' + p.id + '">編集</button>' +
+            '<button class="btn btn-danger btn-sm" type="button" data-del-pal="' + p.id + '">削除</button>' +
+          '</div>' +
+        '</td>' +
+      '</tr>'
+    ).join("");
 
     tbody.querySelectorAll("[data-edit-pal]").forEach(btn => {
       btn.addEventListener("click", () => openPalEditModal(Number(btn.dataset.editPal)));
@@ -3167,7 +3261,7 @@ tr:hover td {
       btn.addEventListener("click", () => {
         const id = Number(btn.dataset.delPal);
         const pal = palById.get(id);
-        openModal("パルの削除", `<p>「${escapeHtml(pal?.name || "")}」を削除しますか？</p>`, [
+        openModal("パルの削除", "<p>「" + escapeHtml(pal ? pal.name : "") + "」を削除しますか？</p>", [
           { label: "キャンセル" },
           {
             label: "削除",
@@ -3186,43 +3280,28 @@ tr:hover td {
   }
 
   function openPalEditModal(palId) {
-    const pal = palId ? palById.get(palId) : { dexNo: "", name: "", power: 1000, indexOrder: 100000, isSpecialOnly: false };
-    const html = `
-      <div class="grid-2">
-        <div class="form-group">
-          <label class="form-label">図鑑番号 (例: 139, 64B)</label>
-          <input type="text" id="mPalDex" class="input" value="${escapeHtml(pal.dexNo || "")}">
-        </div>
-        <div class="form-group">
-          <label class="form-label">パル名</label>
-          <input type="text" id="mPalName" class="input" value="${escapeHtml(pal.name)}">
-        </div>
-      </div>
-      <div class="grid-2">
-        <div class="form-group">
-          <label class="form-label">配合値 (Breeding Power)</label>
-          <input type="number" id="mPalPower" class="input" value="${pal.power}">
-        </div>
-        <div class="form-group">
-          <label class="form-label">同値優先度 (大きい方が優先)</label>
-          <input type="number" id="mPalOrder" class="input" value="${pal.indexOrder}">
-        </div>
-      </div>
-      <label class="checkbox-row">
-        <input type="checkbox" id="mPalSpecial" ${pal.isSpecialOnly ? "checked" : ""}>
-        <span>特殊配合限定（通常の配合値計算の候補から除外する）</span>
-      </label>
-    `;
+    const pal = palId ? palById.get(palId) : { dexNo: "", name: "", power: 1000, priority: 100000, isSpecialOnly: false };
+    const html =
+      '<div class="grid-2">' +
+        '<div class="form-group"><label class="form-label">図鑑番号 (例: 139, 64B)</label><input type="text" id="mPalDex" class="input" value="' + escapeHtml(pal.dexNo || "") + '"></div>' +
+        '<div class="form-group"><label class="form-label">パル名</label><input type="text" id="mPalName" class="input" value="' + escapeHtml(pal.name) + '"></div>' +
+      '</div>' +
+      '<div class="grid-2">' +
+        '<div class="form-group"><label class="form-label">配合値 (Power)</label><input type="number" id="mPalPower" class="input" value="' + pal.power + '"></div>' +
+        '<div class="form-group"><label class="form-label">同値優先度 (大きい方が優先)</label><input type="number" id="mPalPriority" class="input" value="' + pal.priority + '"></div>' +
+      '</div>' +
+      '<label class="checkbox-row"><input type="checkbox" id="mPalSpecial" ' + (pal.isSpecialOnly ? "checked" : "") + '><span>特殊配合限定（通常の配合値計算の候補から除外する）</span></label>';
+
     openModal(palId ? "パルの編集" : "新規パル追加", html, [
       { label: "キャンセル" },
       {
         label: "保存",
         className: "btn btn-primary",
         onClick: () => {
-          const dexNo = document.getElementById("mPalDex").value.trim() || "-";
+          const dexNo = document.getElementById("mPalDex").value.trim().replace(/^#/, "") || "-";
           const name = document.getElementById("mPalName").value.trim();
           const power = Number(document.getElementById("mPalPower").value);
-          const order = Number(document.getElementById("mPalOrder").value);
+          const priority = Number(document.getElementById("mPalPriority").value);
           const isSpecialOnly = document.getElementById("mPalSpecial").checked;
           if (!name || Number.isNaN(power)) {
             showToast("パル名と配合値を正しく入力してください", "error");
@@ -3232,11 +3311,11 @@ tr:hover td {
             pal.dexNo = dexNo;
             pal.name = name;
             pal.power = power;
-            pal.indexOrder = order;
+            pal.priority = priority;
             pal.isSpecialOnly = isSpecialOnly;
           } else {
             const nextId = db.pals.reduce((m, x) => Math.max(m, x.id), 0) + 1;
-            db.pals.push({ id: nextId, dexNo, name, power, indexOrder: order, isSpecialOnly });
+            db.pals.push({ id: nextId, dexNo, name, power, priority, isSpecialOnly });
           }
           saveDB();
           renderPalsTable();
@@ -3250,21 +3329,26 @@ tr:hover td {
     const q = normalizeKana(document.getElementById("filterSpecialsInput").value);
     const tbody = document.getElementById("tableSpecialsBody");
     const list = db.specials.filter(sp => {
-      const a = palById.get(sp.parentA)?.name || "";
-      const b = palById.get(sp.parentB)?.name || "";
-      const c = palById.get(sp.child)?.name || "";
-      return !q || normalizeKana(`${a} ${b} ${c}`).includes(q);
+      const a = palById.get(sp.parentA);
+      const b = palById.get(sp.parentB);
+      const c = palById.get(sp.child);
+      const text = (a ? a.name : "") + " " + (b ? b.name : "") + " " + (c ? c.name : "");
+      return !q || normalizeKana(text).includes(q);
     });
-    tbody.innerHTML = list.map(sp => `
-      <tr>
-        <td>${escapeHtml(palById.get(sp.parentA)?.name || "不明")}</td>
-        <td>${escapeHtml(palById.get(sp.parentB)?.name || "不明")}</td>
-        <td><strong style="color:var(--accent-gold);">${escapeHtml(palById.get(sp.child)?.name || "不明")}</strong></td>
-        <td>
-          <button class="btn btn-danger btn-sm" data-del-sp="${sp.id}">削除</button>
-        </td>
-      </tr>
-    `).join("");
+
+    tbody.innerHTML = list.map(sp => {
+      const a = palById.get(sp.parentA);
+      const b = palById.get(sp.parentB);
+      const c = palById.get(sp.child);
+      return (
+        '<tr>' +
+          '<td>' + escapeHtml(a ? a.name : "不明") + '</td>' +
+          '<td>' + escapeHtml(b ? b.name : "不明") + '</td>' +
+          '<td><strong style="color:var(--accent-gold);">' + escapeHtml(c ? c.name : "不明") + '</strong></td>' +
+          '<td><button class="btn btn-danger btn-sm" type="button" data-del-sp="' + sp.id + '">削除</button></td>' +
+        '</tr>'
+      );
+    }).join("");
 
     tbody.querySelectorAll("[data-del-sp]").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -3278,36 +3362,27 @@ tr:hover td {
   }
 
   function openSpecialAddModal() {
-    let spParentAId = null;
-    let spParentBId = null;
-    let spChildId = null;
+    let spA = null;
+    let spB = null;
+    let spC = null;
 
-    const html = `
-      <div class="form-group">
-        <label class="form-label">親A（図鑑順・検索対応）</label>
-        <div id="mSpACombo"></div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">親B（図鑑順・検索対応）</label>
-        <div id="mSpBCombo"></div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">生まれる子供（図鑑順・検索対応）</label>
-        <div id="mSpCCombo"></div>
-      </div>
-    `;
+    const html =
+      '<div class="form-group"><label class="form-label">親A（図鑑順・検索対応）</label><div id="mSpACombo"></div></div>' +
+      '<div class="form-group"><label class="form-label">親B（図鑑順・検索対応）</label><div id="mSpBCombo"></div></div>' +
+      '<div class="form-group"><label class="form-label">生まれる子供（図鑑順・検索対応）</label><div id="mSpCCombo"></div></div>';
+
     openModal("特殊配合を追加", html, [
       { label: "キャンセル" },
       {
         label: "追加",
         className: "btn btn-primary",
         onClick: () => {
-          if (!spParentAId || !spParentBId || !spChildId) {
+          if (!spA || !spB || !spC) {
             showToast("親A・親B・子供をすべて選択してください", "error");
             return false;
           }
           const nextId = db.specials.reduce((m, x) => Math.max(m, x.id), 0) + 1;
-          db.specials.push({ id: nextId, parentA: spParentAId, parentB: spParentBId, child: spChildId });
+          db.specials.push({ id: nextId, parentA: spA, parentB: spB, child: spC });
           saveDB();
           renderSpecialsTable();
           showToast("特殊配合を追加しました", "success");
@@ -3315,45 +3390,42 @@ tr:hover td {
       }
     ]);
 
-    createSearchCombo("mSpACombo", {
-      placeholder: "親Aのパル名を入力して選択...",
-      getItems: getPalComboItems,
-      onSelect: (item) => { spParentAId = item ? item.id : null; }
-    });
-    createSearchCombo("mSpBCombo", {
-      placeholder: "親Bのパル名を入力して選択...",
-      getItems: getPalComboItems,
-      onSelect: (item) => { spParentBId = item ? item.id : null; }
-    });
-    createSearchCombo("mSpCCombo", {
-      placeholder: "子供のパル名を入力して選択...",
-      getItems: getPalComboItems,
-      onSelect: (item) => { spChildId = item ? item.id : null; }
-    });
+    createSearchCombo("mSpACombo", { placeholder: "親Aを選択...", getItems: getPalComboItems, onSelect: it => { spA = it ? it.id : null; } });
+    createSearchCombo("mSpBCombo", { placeholder: "親Bを選択...", getItems: getPalComboItems, onSelect: it => { spB = it ? it.id : null; } });
+    createSearchCombo("mSpCCombo", { placeholder: "子供を選択...", getItems: getPalComboItems, onSelect: it => { spC = it ? it.id : null; } });
   }
 
   function renderSkillsTable() {
     const q = normalizeKana(document.getElementById("filterSkillsInput").value);
-    const rankOrder = { rainbow: 0, gold: 1, white: 2 };
-    const rankLabel = { rainbow: "虹", gold: "金", white: "白" };
+    const tierLabel = { rainbow: "🌈 虹", gold: "🟡 金", white: "⚪ 白", red: "🔴 赤" };
     const list = db.skills
-      .filter(s => !q || normalizeKana(`${s.name} ${s.desc}`).includes(q))
+      .filter(s => !q || normalizeKana(s.name + " " + (s.category || "") + " " + (s.desc || "")).includes(q))
       .slice()
-      .sort((a, b) => rankOrder[a.rank] - rankOrder[b.rank]);
+      .sort((a, b) => {
+        const ta = TIER_ORDER[normalizeTier(a.tier, a.rank)] || 2;
+        const tb = TIER_ORDER[normalizeTier(b.tier, b.rank)] || 2;
+        if (tb !== ta) return tb - ta;
+        return (a.id || 0) - (b.id || 0);
+      });
+
     const tbody = document.getElementById("tableSkillsBody");
-    tbody.innerHTML = list.map(s => `
-      <tr>
-        <td>${renderSkillBadgeHtml(s, false)}</td>
-        <td>${rankLabel[s.rank] || s.rank}</td>
-        <td>${escapeHtml(s.desc || "")}</td>
-        <td>
-          <div class="inline-flex-gap">
-            <button class="btn btn-sm" data-edit-skill="${s.id}">編集</button>
-            <button class="btn btn-danger btn-sm" data-del-skill="${s.id}">削除</button>
-          </div>
-        </td>
-      </tr>
-    `).join("");
+    tbody.innerHTML = list.map(s => {
+      const t = normalizeTier(s.tier, s.rank);
+      return (
+        '<tr>' +
+          '<td>' + renderSkillBadgeHtml(s, false) + '</td>' +
+          '<td>' + (tierLabel[t] || "⚪ 白") + '</td>' +
+          '<td>' + escapeHtml(s.category || "パル") + '</td>' +
+          '<td>' + escapeHtml(s.desc || "") + '</td>' +
+          '<td>' +
+            '<div class="inline-flex-gap">' +
+              '<button class="btn btn-sm" type="button" data-edit-skill="' + s.id + '">編集</button>' +
+              '<button class="btn btn-danger btn-sm" type="button" data-del-skill="' + s.id + '">削除</button>' +
+            '</div>' +
+          '</td>' +
+        '</tr>'
+      );
+    }).join("");
 
     tbody.querySelectorAll("[data-edit-skill]").forEach(btn => {
       btn.addEventListener("click", () => openSkillEditModal(Number(btn.dataset.editSkill)));
@@ -3370,25 +3442,23 @@ tr:hover td {
   }
 
   function openSkillEditModal(skillId) {
-    const skill = skillId ? skillById.get(skillId) : { name: "", rank: "gold", desc: "" };
-    const html = `
-      <div class="form-group">
-        <label class="form-label">スキル名</label>
-        <input type="text" id="mSkillName" class="input" value="${escapeHtml(skill.name)}" placeholder="例: 鬼神、職人気質">
-      </div>
-      <div class="form-group">
-        <label class="form-label">ランク</label>
-        <select id="mSkillRank" class="select">
-          <option value="rainbow" ${skill.rank === "rainbow" ? "selected" : ""}>虹ランク</option>
-          <option value="gold" ${skill.rank === "gold" ? "selected" : ""}>金ランク</option>
-          <option value="white" ${skill.rank === "white" ? "selected" : ""}>白ランク</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">効果説明</label>
-        <input type="text" id="mSkillDesc" class="input" value="${escapeHtml(skill.desc)}" placeholder="例: 攻撃+30% / 防御+5%">
-      </div>
-    `;
+    const skill = skillId ? skillById.get(skillId) : { name: "", tier: "gold", category: "パル", desc: "" };
+    const curTier = normalizeTier(skill.tier, skill.rank);
+    const html =
+      '<div class="grid-2">' +
+        '<div class="form-group"><label class="form-label">スキル名</label><input type="text" id="mSkillName" class="input" value="' + escapeHtml(skill.name) + '" placeholder="例: 鬼神、次元跳躍"></div>' +
+        '<div class="form-group"><label class="form-label">分類</label><input type="text" id="mSkillCat" class="input" value="' + escapeHtml(skill.category || "パル") + '" placeholder="パル / 世界樹 / 変異 / 伝説"></div>' +
+      '</div>' +
+      '<div class="form-group"><label class="form-label">ランク</label>' +
+        '<select id="mSkillTier" class="select">' +
+          '<option value="rainbow" ' + (curTier === "rainbow" ? "selected" : "") + '>🌈 虹ランク</option>' +
+          '<option value="gold" ' + (curTier === "gold" ? "selected" : "") + '>🟡 金ランク</option>' +
+          '<option value="white" ' + (curTier === "white" ? "selected" : "") + '>⚪ 白ランク</option>' +
+          '<option value="red" ' + (curTier === "red" ? "selected" : "") + '>🔴 赤ランク（マイナス）</option>' +
+        '</select>' +
+      '</div>' +
+      '<div class="form-group"><label class="form-label">効果説明</label><input type="text" id="mSkillDesc" class="input" value="' + escapeHtml(skill.desc || "") + '" placeholder="例: 攻撃+30% / 防御+5%"></div>';
+
     openModal(skillId ? "パッシブスキルの編集" : "新規パッシブスキル追加", html, [
       { label: "キャンセル" },
       {
@@ -3396,7 +3466,8 @@ tr:hover td {
         className: "btn btn-primary",
         onClick: () => {
           const name = document.getElementById("mSkillName").value.trim();
-          const rank = document.getElementById("mSkillRank").value;
+          const category = document.getElementById("mSkillCat").value.trim() || "パル";
+          const tier = document.getElementById("mSkillTier").value;
           const desc = document.getElementById("mSkillDesc").value.trim();
           if (!name) {
             showToast("スキル名を入力してください", "error");
@@ -3404,11 +3475,12 @@ tr:hover td {
           }
           if (skillId) {
             skill.name = name;
-            skill.rank = rank;
+            skill.category = category;
+            skill.tier = tier;
             skill.desc = desc;
           } else {
             const nextId = db.skills.reduce((m, x) => Math.max(m, x.id), 0) + 1;
-            db.skills.push({ id: nextId, name, rank, desc });
+            db.skills.push({ id: nextId, name, tier, category, desc });
           }
           saveDB();
           renderSkillsTable();
@@ -3421,7 +3493,7 @@ tr:hover td {
   function downloadFile(content, filename, mimeType) {
     try {
       const prefix = mimeType === "text/csv" ? "\uFEFF" : "";
-      const blob = new Blob([prefix + content], { type: `${mimeType};charset=utf-8` });
+      const blob = new Blob([prefix + content], { type: mimeType + ";charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -3436,15 +3508,13 @@ tr:hover td {
   }
 
   function openJsonImportModal() {
-    const html = `
-      <div class="form-group">
-        <label class="form-label">エクスポートしたJSONファイルを読み込むか、JSONテキストを直接貼り付けてください。</label>
-        <div style="margin-bottom:10px;">
-          <button type="button" id="btnPickJsonFile" class="btn btn-sm">📁 JSONファイルを選択</button>
-        </div>
-        <textarea id="jsonImportArea" class="textarea" rows="8" placeholder='{"pals":[...],"specials":[...],"skills":[...]}'></textarea>
-      </div>
-    `;
+    const html =
+      '<div class="form-group">' +
+        '<label class="form-label">JSONファイルを読み込むか、JSONテキストを貼り付けてください。</label>' +
+        '<div style="margin-bottom:10px;"><button type="button" id="btnPickJsonFile" class="btn btn-sm">📁 JSONファイルを選択</button></div>' +
+        '<textarea id="jsonImportArea" class="textarea" rows="8" placeholder=\'{"pals":[...],"specials":[...],"skills":[...]}\'></textarea>' +
+      '</div>';
+
     openModal("全データ JSON インポート", html, [
       { label: "キャンセル" },
       {
@@ -3491,15 +3561,13 @@ tr:hover td {
   }
 
   function openOpggImportModal() {
-    const html = `
-      <div class="form-group">
-        <label class="form-label">OP.GGの「配合値」一覧ページを Ctrl+A → Ctrl+C で全コピーし、そのまま貼り付けてください。</label>
-        <textarea id="opggPasteArea" class="textarea" rows="9" placeholder="シェルガドラ&#10;#184&#10;303000シャオロン&#10;特殊な組み合わせ&#10;#192&#10;404000..."></textarea>
-      </div>
-      <div style="font-size:0.76rem; color:var(--text-secondary);">
-        ※ 既存パルは配合値・優先度・特殊フラグを上書き更新し、新パルは自動追加します（手持ちや特殊配合リストは保持されます）。
-      </div>
-    `;
+    const html =
+      '<div class="form-group">' +
+        '<label class="form-label">OP.GGの「配合値」一覧ページを Ctrl+A → Ctrl+C で全コピーし、そのまま貼り付けてください。</label>' +
+        '<textarea id="opggPasteArea" class="textarea" rows="9" placeholder="シェルガドラ&#10;#184&#10;303000シャオロン&#10;特殊な組み合わせ&#10;#192&#10;404000..."></textarea>' +
+      '</div>' +
+      '<div style="font-size:0.76rem; color:var(--text-secondary);">※ 既存パルは配合値・優先度・特殊フラグを上書き更新し、新パルは自動追加します。</div>';
+
     openModal("OP.GG配合値ページ丸ごとコピペ更新", html, [
       { label: "キャンセル" },
       {
@@ -3522,11 +3590,11 @@ tr:hover td {
             if (existing) {
               existing.dexNo = item.dexNo;
               existing.power = item.power;
-              existing.indexOrder = item.indexOrder;
+              existing.priority = item.priority;
               existing.isSpecialOnly = item.isSpecialOnly;
               updated++;
             } else {
-              const newPal = { id: nextId++, ...item };
+              const newPal = Object.assign({ id: nextId++ }, item);
               db.pals.push(newPal);
               byName.set(item.name, newPal);
               added++;
@@ -3534,7 +3602,7 @@ tr:hover td {
           });
           saveDB();
           renderAllDataTables();
-          showToast(`OP.GGデータを反映しました（更新:${updated}件 / 新規:${added}件）`, "success");
+          showToast("OP.GGデータを反映しました（更新:" + updated + "件 / 新規:" + added + "件）", "success");
         }
       }
     ]);
@@ -3553,14 +3621,15 @@ tr:hover td {
 
       const digits = numMatch[1];
       let power = 0;
-      let indexOrder = 0;
+      let priority = 0;
       let matched = false;
+
       for (let len = 2; len <= 4 && len < digits.length; len++) {
         const p = Number(digits.slice(0, len));
         const o = Number(digits.slice(len));
         if (p * 100 === o) {
           power = p;
-          indexOrder = o;
+          priority = o;
           matched = true;
           break;
         }
@@ -3570,7 +3639,7 @@ tr:hover td {
         const o = Number(digits.slice(4));
         if (p >= 1000 && p <= 3500 && o > 0) {
           power = p;
-          indexOrder = o;
+          priority = o;
         } else {
           continue;
         }
@@ -3587,161 +3656,160 @@ tr:hover td {
       const name = lines[nameLineIdx].replace(/^\d+/, "").trim();
       if (!name || name === "同値優先度" || name === "配合値") continue;
 
-      results.push({ dexNo, name, power, indexOrder, isSpecialOnly });
+      results.push({ dexNo, name, power, priority, isSpecialOnly });
     }
     return results;
   }
 
   function exportPalsCsv() {
-    const rows = [["dexNo", "name", "power", "indexOrder", "isSpecialOnly"]];
-    db.pals.forEach(p => rows.push([p.dexNo || "", p.name, p.power, p.indexOrder, p.isSpecialOnly ? "true" : "false"]));
+    const rows = [["dexNo", "name", "power", "priority", "isSpecialOnly"]];
+    db.pals.forEach(p => rows.push([p.dexNo, p.name, p.power, p.priority, p.isSpecialOnly ? "true" : "false"]));
     downloadFile(rows.map(r => r.join(",")).join("\n"), "palworld_pals.csv", "text/csv");
     showToast("パル一覧CSVを出力しました", "success");
   }
 
   function exportSpecialsCsv() {
     const rows = [["parentA", "parentB", "child"]];
-    db.specials.forEach(s => rows.push([
-      palById.get(s.parentA)?.name || "",
-      palById.get(s.parentB)?.name || "",
-      palById.get(s.child)?.name || ""
-    ]));
+    db.specials.forEach(s => {
+      const a = palById.get(s.parentA);
+      const b = palById.get(s.parentB);
+      const c = palById.get(s.child);
+      rows.push([a ? a.name : "", b ? b.name : "", c ? c.name : ""]);
+    });
     downloadFile(rows.map(r => r.join(",")).join("\n"), "palworld_specials.csv", "text/csv");
     showToast("特殊配合CSVを出力しました", "success");
   }
 
   function exportSkillsCsv() {
-    const rows = [["name", "rank", "desc"]];
-    db.skills.forEach(s => rows.push([s.name, s.rank, `"${(s.desc || "").replace(/"/g, '""')}"`]));
+    const rows = [["name", "tier", "category", "desc"]];
+    db.skills.forEach(s => {
+      const desc = String(s.desc || "").replace(/"/g, '""');
+      rows.push([s.name, normalizeTier(s.tier, s.rank), s.category || "パル", '"' + desc + '"']);
+    });
     downloadFile(rows.map(r => r.join(",")).join("\n"), "palworld_skills.csv", "text/csv");
     showToast("スキル一覧CSVを出力しました", "success");
   }
 
-  function triggerCsvImport(kind) {
-    const fi = document.getElementById("hiddenFileInput");
-    fi.value = "";
-    fi.onchange = () => {
-      const file = fi.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const lines = reader.result.replace(/^\uFEFF/, "").split(/\r?\n/).filter(l => l.trim());
-          if (lines.length < 2) throw new Error("データ行がありません");
-          const dataLines = lines.slice(1);
-
-          if (kind === "pals") {
-            let nextId = db.pals.reduce((m, x) => Math.max(m, x.id), 0) + 1;
-            dataLines.forEach(line => {
-              const cols = line.split(",").map(s => s.trim().replace(/^"|"$/g, ""));
-              const dexNo = (cols[0] || "-").replace(/^#/, "");
-              const name = cols[1] || cols[0];
-              const power = Number(cols[2]);
-              const order = Number(cols[3]) || power * 100;
-              const sp = cols[4] === "true" || cols[4] === "1";
-              if (!name || Number.isNaN(power)) return;
-              const existing = db.pals.find(p => p.name === name);
-              if (existing) {
-                existing.dexNo = dexNo;
-                existing.power = power;
-                existing.indexOrder = order;
-                existing.isSpecialOnly = sp;
-              } else {
-                db.pals.push({ id: nextId++, dexNo, name, power, indexOrder: order, isSpecialOnly: sp });
-              }
-            });
-          } else if (kind === "specials") {
-            let nextId = db.specials.reduce((m, x) => Math.max(m, x.id), 0) + 1;
-            const nameMap = new Map(db.pals.map(p => [p.name, p.id]));
-            dataLines.forEach(line => {
-              const cols = line.split(",").map(s => s.trim().replace(/^"|"$/g, ""));
-              const a = nameMap.get(cols[0]);
-              const b = nameMap.get(cols[1]);
-              const c = nameMap.get(cols[2]);
-              if (a && b && c) {
-                db.specials.push({ id: nextId++, parentA: a, parentB: b, child: c });
-              }
-            });
-          } else if (kind === "skills") {
-            let nextId = db.skills.reduce((m, x) => Math.max(m, x.id), 0) + 1;
-            dataLines.forEach(line => {
-              const cols = line.split(",").map(s => s.trim().replace(/^"|"$/g, ""));
-              const name = cols[0];
-              const rank = ["rainbow", "gold", "white"].includes(cols[1]) ? cols[1] : "gold";
-              const desc = cols[2] || "";
-              if (!name) return;
-              const existing = db.skills.find(s => s.name === name);
-              if (existing) {
-                existing.rank = rank;
-                existing.desc = desc;
-              } else {
-                db.skills.push({ id: nextId++, name, rank, desc });
-              }
-            });
-          }
-          saveDB();
-          renderAllDataTables();
-          showToast("CSVデータをインポートしました", "success");
-        } catch (e) {
-          showToast("CSV読込エラー: " + e.message, "error");
-        }
-      };
-      reader.readAsText(file, "UTF-8");
-    };
-    fi.click();
+  /* ==========================================================================
+   * 10. 管理者モード・タブ切替・ヘッダー統計・安全な初期化
+   * ========================================================================== */
+  function initAdminMode() {
+    const btn = document.getElementById("btnAdminToggle");
+    btn.addEventListener("click", () => {
+      if (isAdminMode) {
+        isAdminMode = false;
+        updateAdminUI();
+        switchMainTab("planner");
+        showToast("管理者モードをログアウトしました");
+      } else {
+        openAdminLoginModal();
+      }
+    });
+    updateAdminUI();
   }
 
-  /* --------------------------------------------------------------------------
-   * 12. メインタブ切替・ヘッダー統計・初期化
-   * -------------------------------------------------------------------------- */
-  function updateHeaderStats() {
-    document.getElementById("headerStats").innerHTML = `
-      <span class="stat-pill">収録パル <strong>${db.pals.length}</strong> 体</span>
-      <span class="stat-pill">特殊配合 <strong>${db.specials.length}</strong> 組</span>
-      <span class="stat-pill">パッシブ <strong>${db.skills.length}</strong> 種</span>
-    `;
+  function updateAdminUI() {
+    const tabBtnData = document.getElementById("tabBtnData");
+    const adminBtn = document.getElementById("btnAdminToggle");
+    if (isAdminMode) {
+      tabBtnData.style.display = "flex";
+      adminBtn.textContent = "🔓 管理者モード中（ログアウト）";
+      adminBtn.classList.add("admin-active");
+    } else {
+      tabBtnData.style.display = "none";
+      adminBtn.textContent = "🔒 管理者ログイン";
+      adminBtn.classList.remove("admin-active");
+    }
+  }
+
+  function openAdminLoginModal() {
+    const html =
+      '<div class="form-group">' +
+        '<label class="form-label">管理者パスワード</label>' +
+        '<input type="password" id="mAdminPassword" class="input" placeholder="パスワードを入力..." autocomplete="off">' +
+      '</div>' +
+      '<div id="mAdminError" style="color:var(--accent-rose); font-size:0.8rem; min-height:18px;"></div>';
+
+    openModal("管理者ログイン", html, [
+      { label: "キャンセル" },
+      {
+        label: "ログイン",
+        className: "btn btn-primary",
+        onClick: () => {
+          const val = document.getElementById("mAdminPassword").value;
+          if (val !== ADMIN_PASSWORD) {
+            document.getElementById("mAdminError").textContent = "パスワードが正しくありません。";
+            return false;
+          }
+          isAdminMode = true;
+          updateAdminUI();
+          showToast("管理者モードでログインしました", "success");
+        }
+      }
+    ]);
+
+    setTimeout(() => {
+      const pwInput = document.getElementById("mAdminPassword");
+      if (pwInput) {
+        pwInput.focus();
+        pwInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            const loginBtn = document.querySelector("#modalActions .btn-primary");
+            if (loginBtn) loginBtn.click();
+          }
+        });
+      }
+    }, 40);
   }
 
   function switchMainTab(tabName) {
-    if (tabName === "data" && !isAdmin) {
-      openAdminLoginModal();
-      return;
-    }
     document.querySelectorAll(".tab-btn").forEach(b => {
       b.classList.toggle("active", b.dataset.tab === tabName);
     });
     document.querySelectorAll(".tab-panel").forEach(p => {
-      p.classList.toggle("active", p.id === `tab-${tabName}`);
+      p.classList.toggle("active", p.id === ("tab-" + tabName));
     });
+  }
+
+  function updateHeaderStats() {
+    document.getElementById("headerStats").innerHTML =
+      '<span class="stat-pill">収録パル <strong>' + db.pals.length + '</strong> 体</span>' +
+      '<span class="stat-pill">特殊配合 <strong>' + db.specials.length + '</strong> 組</span>' +
+      '<span class="stat-pill">パッシブ <strong>' + db.skills.length + '</strong> 種</span>';
   }
 
   function initMainTabs() {
     document.querySelectorAll(".tab-btn").forEach(btn => {
       btn.addEventListener("click", () => {
+        if (btn.dataset.tab === "data" && !isAdminMode) return;
         switchMainTab(btn.dataset.tab);
       });
-    });
-
-    document.getElementById("btnAdminTrigger").addEventListener("click", () => {
-      if (isAdmin) {
-        logoutAdmin();
-      } else {
-        openAdminLoginModal();
-      }
     });
   }
 
   function bootstrap() {
-    rebuildBreedingEngine();
-    updateHeaderStats();
-    initMainTabs();
-    initPlannerTab();
-    initLookupTab();
-    initDataTab();
-    updateAdminUI();
+    try {
+      loadInitialState();
+      rebuildEngine();
+      updateHeaderStats();
+      initMainTabs();
+      initAdminMode();
+      initPlannerTab();
+      initLookupTab();
+      initDataTab();
+      window.__PAL_APP_READY__ = true;
+    } catch (e) {
+      if (typeof window.__SHOW_ERR_BAR__ === "function") {
+        window.__SHOW_ERR_BAR__(e);
+      }
+    }
   }
 
-  window.addEventListener("DOMContentLoaded", bootstrap);
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", bootstrap);
+  } else {
+    bootstrap();
+  }
 })();
 </script>
 </body>
